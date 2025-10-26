@@ -107,13 +107,13 @@ func (e *Extension) Deserialize(data []byte) int {
 	_ = binary.Read(buf, binary.BigEndian, &e.Length)
 
 	// data
-	e.Data = NewExtension(ExtensionType(e.Type))
+	e.Data = newExtension(e.Type)
 	e.Data.Deserialize(buf.Next(int(e.Length)))
 
 	return len(data) - buf.Len()
 }
 
-func NewExtension(extType ExtensionType) ExchangeObject {
+func newExtension(extType ExtensionType) ExchangeObject {
 	switch extType {
 	case Ext_ServerName:
 		return &ExtServerNameList{}
@@ -128,7 +128,6 @@ func NewExtension(extType ExtensionType) ExchangeObject {
 	case Ext_SupportedVersions:
 		return &ExtSupportedVersions{}
 	}
-
 	return nil
 }
 
