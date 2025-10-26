@@ -51,6 +51,15 @@ func (r *Record) Deserialize(data []byte) int {
 	_ = binary.Read(buf, binary.BigEndian, &r.Type)
 	_ = binary.Read(buf, binary.BigEndian, &r.ProtocolVersion)
 	_ = binary.Read(buf, binary.BigEndian, &r.Length)
+	r.Fragment = newFragment(r.Type)
 	r.Fragment.Deserialize(buf.Next(int(r.Length)))
 	return len(data) - buf.Len()
+}
+
+func newFragment(recordContentType RecordContentType) ExchangeObject {
+	switch recordContentType {
+	case Record_Handshake:
+		return &HandShake{}
+	}
+	return nil
 }

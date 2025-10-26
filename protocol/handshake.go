@@ -3,6 +3,8 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
+
+	"trieutrng.com/toy-tls/helpers"
 )
 
 // handshake type
@@ -29,14 +31,14 @@ const (
 
 type HandShake struct {
 	Type   HandshakeType
-	Length uint16
+	Length int // the actual type is uint24 as RFC8446, using int as placeholder, would treat it as uint24 in the serializing and deserializing
 	Body   ExchangeObject
 }
 
 func (h *HandShake) Serialize() []byte {
 	buf := new(bytes.Buffer)
 	_ = binary.Write(buf, binary.BigEndian, h.Type)
-	_ = binary.Write(buf, binary.BigEndian, h.Length)
+	buf.Write(helpers.MarshalUint24(h.Length))
 	buf.Write(h.Body.Serialize())
 	return buf.Bytes()
 }
@@ -44,9 +46,11 @@ func (h *HandShake) Serialize() []byte {
 func (h *HandShake) Deserialize(data []byte) int {
 	buf := bytes.NewBuffer(data)
 	_ = binary.Read(buf, binary.BigEndian, &h.Type)
-	_ = binary.Read(buf, binary.BigEndian, &h.Length)
-	handshakeBody := newHandshakeBody(h.Type)
-	handshakeBody.Deserialize(buf.Next(int(h.Length)))
+	h.Length = helpers.UnmarshalUint24(buf.Next(3))
+
+	h.Body = newHandshakeBody(h.Type)
+	h.Body.Deserialize(buf.Next(h.Length))
+
 	return len(data) - buf.Len()
 }
 
@@ -72,9 +76,9 @@ func (c *ClientHello) Serialize() []byte {
 	_ = binary.Write(buf, binary.BigEndian, c.ProtocolVersion)
 	buf.Write(c.Random)
 	buf.Write(c.LegacySessionId.Serialize())
-	_ = binary.Write(buf, binary.BigEndian, c.CipherSuites.Serialize())
-	_ = binary.Write(buf, binary.BigEndian, c.LegacyCompressionMethods.Serialize())
-	_ = binary.Write(buf, binary.BigEndian, c.Extensions.Serialize())
+	buf.Write(c.CipherSuites.Serialize())
+	buf.Write(c.LegacyCompressionMethods.Serialize())
+	buf.Write(c.Extensions.Serialize())
 	return buf.Bytes()
 }
 
@@ -82,16 +86,14 @@ func (c *ClientHello) Deserialize(data []byte) int {
 	buf := bytes.NewBuffer(data)
 	_ = binary.Read(buf, binary.BigEndian, &c.ProtocolVersion)
 	// random has 32 bytes
-	c.Random = make([]byte, buf.Len())
+	c.Random = make([]byte, 32)
 	copy(c.Random, buf.Next(32))
-
 	c.LegacySessionId = SessionID{}
 	c.CipherSuites = CipherSuites{}
 	c.LegacyCompressionMethods = CompressionMethod{}
 	c.Extensions = Extensions{}
 
 	read := len(data) - buf.Len()
-	read += c.LegacySessionId.Deserialize(data[read:])
 	read += c.LegacySessionId.Deserialize(data[read:])
 	read += c.CipherSuites.Deserialize(data[read:])
 	read += c.LegacyCompressionMethods.Deserialize(data[read:])

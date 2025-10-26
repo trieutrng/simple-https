@@ -89,27 +89,18 @@ type Extension struct {
 
 func (e *Extension) Serialize() []byte {
 	buf := new(bytes.Buffer)
-	// type
 	_ = binary.Write(buf, binary.BigEndian, e.Type)
-	// length
 	_ = binary.Write(buf, binary.BigEndian, e.Length)
-	// data
 	buf.Write(e.Data.Serialize())
-
 	return buf.Bytes()
 }
 
 func (e *Extension) Deserialize(data []byte) int {
 	buf := bytes.NewBuffer(data)
-	// type
 	_ = binary.Read(buf, binary.BigEndian, &e.Type)
-	// length
 	_ = binary.Read(buf, binary.BigEndian, &e.Length)
-
-	// data
 	e.Data = newExtension(e.Type)
 	e.Data.Deserialize(buf.Next(int(e.Length)))
-
 	return len(data) - buf.Len()
 }
 
@@ -131,7 +122,6 @@ func newExtension(extType ExtensionType) ExchangeObject {
 	return nil
 }
 
-// Extension: ServerName
 type ExtServerNameList struct {
 	Length     uint16
 	ServerName ServerName
@@ -175,7 +165,6 @@ func (s *ServerName) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
-// Extension: SupportedGroups
 type ExtSupportedGroups struct {
 	Length     uint16
 	NamedCurve []NamedCurve
@@ -204,7 +193,6 @@ func (e *ExtSupportedGroups) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
-// Extension: Signature algorithms
 type ExtSignatureAlgorithms struct {
 	Length              uint16
 	SignatureAlgorithms []SignatureAlgorithms
@@ -233,7 +221,6 @@ func (e *ExtSignatureAlgorithms) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
-// Extension: Key share
 type ExtKeyShare struct {
 	Length      uint16
 	Group       NamedCurve
@@ -260,7 +247,6 @@ func (e *ExtKeyShare) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
-// Extension: PSK key exchange mode
 type ExtPSKKeyExchangeModes struct {
 	Length              uint8
 	PSKKeyExchangeModes []PSKKeyExchangeMode
@@ -289,7 +275,6 @@ func (e *ExtPSKKeyExchangeModes) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
-// Extension: Supported version
 type ExtSupportedVersions struct {
 	Length            uint8
 	SupportedVersions []ProtocolVersion
