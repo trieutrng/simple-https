@@ -58,12 +58,23 @@ type Extensions struct {
 	Data   []Extension
 }
 
+func NewExtensions(extensions []Extension) *Extensions {
+	return &Extensions{
+		Data: extensions,
+	}
+}
+
 func (e *Extensions) Serialize() []byte {
 	buf := new(bytes.Buffer)
-	_ = binary.Write(buf, binary.BigEndian, e.Length)
-	for _, ext := range e.Data {
-		_ = binary.Write(buf, binary.BigEndian, ext.Serialize())
+
+	dataBuf := new(bytes.Buffer)
+	for _, extension := range e.Data {
+		_ = binary.Write(dataBuf, binary.BigEndian, extension.Serialize())
 	}
+	extensions := dataBuf.Bytes()
+	_ = binary.Write(buf, binary.BigEndian, uint16(len(extensions)))
+	buf.Write(extensions)
+
 	return buf.Bytes()
 }
 
@@ -87,11 +98,21 @@ type Extension struct {
 	Data   ExchangeObject
 }
 
+func NewExtension(extType ExtensionType, data *ExchangeObject) *Extension {
+	return &Extension{
+		Type: extType,
+		Data: *data,
+	}
+}
+
 func (e *Extension) Serialize() []byte {
 	buf := new(bytes.Buffer)
 	_ = binary.Write(buf, binary.BigEndian, e.Type)
-	_ = binary.Write(buf, binary.BigEndian, e.Length)
-	buf.Write(e.Data.Serialize())
+
+	dataBuf := e.Data.Serialize()
+	_ = binary.Write(buf, binary.BigEndian, uint16(len(dataBuf)))
+	buf.Write(dataBuf)
+
 	return buf.Bytes()
 }
 
@@ -127,10 +148,17 @@ type ExtServerNameList struct {
 	ServerName ServerName
 }
 
+func NewExtServerNameList(serverName *ServerName) *ExtServerNameList {
+	return &ExtServerNameList{
+		ServerName: *serverName,
+	}
+}
+
 func (e *ExtServerNameList) Serialize() []byte {
 	buf := new(bytes.Buffer)
-	_ = binary.Write(buf, binary.BigEndian, e.Length)
-	_ = binary.Write(buf, binary.BigEndian, e.ServerName.Serialize())
+	serverNameBuf := e.ServerName.Serialize()
+	_ = binary.Write(buf, binary.BigEndian, uint16(len(serverNameBuf)))
+	buf.Write(serverNameBuf)
 	return buf.Bytes()
 }
 
@@ -148,10 +176,17 @@ type ServerName struct {
 	Data     []byte
 }
 
+func NewServerName(nameType ServerNameType, name []byte) *ServerName {
+	return &ServerName{
+		NameType: nameType,
+		Data:     name,
+	}
+}
+
 func (s *ServerName) Serialize() []byte {
 	buf := new(bytes.Buffer)
 	_ = binary.Write(buf, binary.BigEndian, s.NameType)
-	_ = binary.Write(buf, binary.BigEndian, s.Length)
+	_ = binary.Write(buf, binary.BigEndian, uint16(len(s.Data)))
 	buf.Write(s.Data)
 	return buf.Bytes()
 }
@@ -170,12 +205,23 @@ type ExtSupportedGroups struct {
 	NamedCurve []NamedCurve
 }
 
+func NewExtSupportedGroups(namedCurve []NamedCurve) *ExtSupportedGroups {
+	return &ExtSupportedGroups{
+		NamedCurve: namedCurve,
+	}
+}
+
 func (e *ExtSupportedGroups) Serialize() []byte {
 	buf := new(bytes.Buffer)
-	_ = binary.Write(buf, binary.BigEndian, e.Length)
-	for _, curve := range e.NamedCurve {
-		_ = binary.Write(buf, binary.BigEndian, curve)
+
+	namedCurveBuf := new(bytes.Buffer)
+	for _, namedCurve := range e.NamedCurve {
+		_ = binary.Write(namedCurveBuf, binary.BigEndian, namedCurve)
 	}
+	namedCurves := namedCurveBuf.Bytes()
+	_ = binary.Write(buf, binary.BigEndian, uint16(len(namedCurves)))
+	buf.Write(namedCurves)
+
 	return buf.Bytes()
 }
 
@@ -198,12 +244,23 @@ type ExtSignatureAlgorithms struct {
 	SignatureAlgorithms []SignatureAlgorithms
 }
 
+func NewExtSignatureAlgorithms(signatureAlgorithms []SignatureAlgorithms) *ExtSignatureAlgorithms {
+	return &ExtSignatureAlgorithms{
+		SignatureAlgorithms: signatureAlgorithms,
+	}
+}
+
 func (e *ExtSignatureAlgorithms) Serialize() []byte {
 	buf := new(bytes.Buffer)
-	_ = binary.Write(buf, binary.BigEndian, e.Length)
-	for _, algorithm := range e.SignatureAlgorithms {
-		_ = binary.Write(buf, binary.BigEndian, algorithm)
+
+	signatureAlgorithmsBuf := new(bytes.Buffer)
+	for _, signatureAlgorithm := range e.SignatureAlgorithms {
+		_ = binary.Write(signatureAlgorithmsBuf, binary.BigEndian, signatureAlgorithm)
 	}
+	signatureAlgorithms := signatureAlgorithmsBuf.Bytes()
+	_ = binary.Write(buf, binary.BigEndian, uint16(len(signatureAlgorithms)))
+	buf.Write(signatureAlgorithms)
+
 	return buf.Bytes()
 }
 
@@ -228,11 +285,18 @@ type ExtKeyShare struct {
 	KeyExchange []byte
 }
 
+func NewExtKeyShare(group NamedCurve, key []byte) *ExtKeyShare {
+	return &ExtKeyShare{
+		Group:       group,
+		KeyExchange: key,
+	}
+}
+
 func (e *ExtKeyShare) Serialize() []byte {
 	buf := new(bytes.Buffer)
-	_ = binary.Write(buf, binary.BigEndian, e.Length)
+	_ = binary.Write(buf, binary.BigEndian, uint16(2+2+len(e.KeyExchange))) // 2 bytes group + 2 bytes key length + key length
 	_ = binary.Write(buf, binary.BigEndian, e.Group)
-	_ = binary.Write(buf, binary.BigEndian, e.KeyLength)
+	_ = binary.Write(buf, binary.BigEndian, uint16(len(e.KeyExchange)))
 	buf.Write(e.KeyExchange)
 	return buf.Bytes()
 }
@@ -252,12 +316,23 @@ type ExtPSKKeyExchangeModes struct {
 	PSKKeyExchangeModes []PSKKeyExchangeMode
 }
 
+func NewExtPSKKeyExchangeModes(pskKeyExchangeModes []PSKKeyExchangeMode) *ExtPSKKeyExchangeModes {
+	return &ExtPSKKeyExchangeModes{
+		PSKKeyExchangeModes: pskKeyExchangeModes,
+	}
+}
+
 func (e *ExtPSKKeyExchangeModes) Serialize() []byte {
 	buf := new(bytes.Buffer)
-	_ = binary.Write(buf, binary.BigEndian, e.Length)
-	for _, pskMode := range e.PSKKeyExchangeModes {
-		_ = binary.Write(buf, binary.BigEndian, pskMode)
+
+	pskKeyExchangeModesBuf := new(bytes.Buffer)
+	for _, pskKeyExchangeMode := range e.PSKKeyExchangeModes {
+		_ = binary.Write(pskKeyExchangeModesBuf, binary.BigEndian, pskKeyExchangeMode)
 	}
+	pskKeyExchangeModes := pskKeyExchangeModesBuf.Bytes()
+	_ = binary.Write(buf, binary.BigEndian, uint8(len(pskKeyExchangeModes)))
+	buf.Write(pskKeyExchangeModes)
+
 	return buf.Bytes()
 }
 
@@ -280,12 +355,23 @@ type ExtSupportedVersions struct {
 	SupportedVersions []ProtocolVersion
 }
 
+func NewExtSupportedVersions(versions []ProtocolVersion) *ExtSupportedVersions {
+	return &ExtSupportedVersions{
+		SupportedVersions: versions,
+	}
+}
+
 func (e *ExtSupportedVersions) Serialize() []byte {
 	buf := new(bytes.Buffer)
-	_ = binary.Write(buf, binary.BigEndian, e.Length)
-	for _, protocolVersion := range e.SupportedVersions {
-		_ = binary.Write(buf, binary.BigEndian, protocolVersion)
+
+	versionsBuf := new(bytes.Buffer)
+	for _, version := range e.SupportedVersions {
+		_ = binary.Write(versionsBuf, binary.BigEndian, version)
 	}
+	supportedVersions := versionsBuf.Bytes()
+	_ = binary.Write(buf, binary.BigEndian, uint8(len(supportedVersions)))
+	buf.Write(supportedVersions)
+
 	return buf.Bytes()
 }
 

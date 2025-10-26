@@ -35,11 +35,21 @@ type HandShake struct {
 	Body   ExchangeObject
 }
 
+func NewHandShake(handShakeType HandshakeType, body *ExchangeObject) *HandShake {
+	return &HandShake{
+		Type: handShakeType,
+		Body: *body,
+	}
+}
+
 func (h *HandShake) Serialize() []byte {
 	buf := new(bytes.Buffer)
 	_ = binary.Write(buf, binary.BigEndian, h.Type)
-	buf.Write(helpers.MarshalUint24(h.Length))
-	buf.Write(h.Body.Serialize())
+
+	body := h.Body.Serialize()
+	buf.Write(helpers.MarshalUint24(len(body)))
+	buf.Write(body)
+
 	return buf.Bytes()
 }
 
@@ -47,7 +57,6 @@ func (h *HandShake) Deserialize(data []byte) int {
 	buf := bytes.NewBuffer(data)
 	_ = binary.Read(buf, binary.BigEndian, &h.Type)
 	h.Length = helpers.UnmarshalUint24(buf.Next(3))
-
 	h.Body = newHandshakeBody(h.Type)
 	h.Body.Deserialize(buf.Next(h.Length))
 
@@ -69,6 +78,17 @@ type ClientHello struct {
 	CipherSuites             CipherSuites
 	LegacyCompressionMethods CompressionMethod
 	Extensions               Extensions
+}
+
+func NewClientHello(protocolVersion ProtocolVersion, random []byte, sessionId *SessionID, cipherSuites *CipherSuites, compressionMethod *CompressionMethod, extensions *Extensions) *ClientHello {
+	return &ClientHello{
+		ProtocolVersion:          protocolVersion,
+		Random:                   random,
+		LegacySessionId:          *sessionId,
+		CipherSuites:             *cipherSuites,
+		LegacyCompressionMethods: *compressionMethod,
+		Extensions:               *extensions,
+	}
 }
 
 func (c *ClientHello) Serialize() []byte {
@@ -107,9 +127,15 @@ type SessionID struct {
 	Data   []byte
 }
 
+func NewSessionID(data []byte) *SessionID {
+	return &SessionID{
+		Data: data,
+	}
+}
+
 func (s *SessionID) Serialize() []byte {
 	buf := new(bytes.Buffer)
-	_ = binary.Write(buf, binary.BigEndian, s.Length)
+	_ = binary.Write(buf, binary.BigEndian, byte(len(s.Data)))
 	buf.Write(s.Data)
 	return buf.Bytes()
 }
@@ -127,12 +153,23 @@ type CipherSuites struct {
 	CipherSuites []CipherSuite
 }
 
+func NewCipherSuites(cipherSuites []CipherSuite) *CipherSuites {
+	return &CipherSuites{
+		CipherSuites: cipherSuites,
+	}
+}
+
 func (s *CipherSuites) Serialize() []byte {
 	buf := new(bytes.Buffer)
-	_ = binary.Write(buf, binary.BigEndian, s.Length)
+
+	cipherSuitesBuf := new(bytes.Buffer)
 	for _, cipherSuite := range s.CipherSuites {
-		_ = binary.Write(buf, binary.BigEndian, cipherSuite)
+		_ = binary.Write(cipherSuitesBuf, binary.BigEndian, cipherSuite)
 	}
+	cipherSuites := cipherSuitesBuf.Bytes()
+	_ = binary.Write(buf, binary.BigEndian, uint16(len(cipherSuites)))
+	buf.Write(cipherSuites)
+
 	return buf.Bytes()
 }
 
@@ -155,9 +192,15 @@ type CompressionMethod struct {
 	Data   []byte
 }
 
+func NewCompressionMethod(data []byte) *CompressionMethod {
+	return &CompressionMethod{
+		Data: data,
+	}
+}
+
 func (c *CompressionMethod) Serialize() []byte {
 	buf := new(bytes.Buffer)
-	_ = binary.Write(buf, binary.BigEndian, c.Length)
+	_ = binary.Write(buf, binary.BigEndian, byte(len(c.Data)))
 	buf.Write(c.Data)
 	return buf.Bytes()
 }

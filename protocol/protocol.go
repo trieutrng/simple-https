@@ -37,12 +37,23 @@ type Record struct {
 	Fragment        ExchangeObject
 }
 
+func NewRecord(recordType RecordContentType, protocolVersion ProtocolVersion, fragment *ExchangeObject) *Record {
+	return &Record{
+		Type:            recordType,
+		ProtocolVersion: protocolVersion,
+		Fragment:        *fragment,
+	}
+}
+
 func (r *Record) Serialize() []byte {
 	buf := new(bytes.Buffer)
 	_ = binary.Write(buf, binary.BigEndian, r.Type)
 	_ = binary.Write(buf, binary.BigEndian, r.ProtocolVersion)
-	_ = binary.Write(buf, binary.BigEndian, r.Length)
-	buf.Write(r.Fragment.Serialize())
+
+	fragment := r.Fragment.Serialize()
+	_ = binary.Write(buf, binary.BigEndian, uint16(len(fragment)))
+	buf.Write(fragment)
+
 	return buf.Bytes()
 }
 
