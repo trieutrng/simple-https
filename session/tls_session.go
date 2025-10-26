@@ -4,6 +4,7 @@ import (
 	"net"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
 	"trieutrng.com/toy-tls/crypto"
 	"trieutrng.com/toy-tls/protocol"
 )
@@ -45,9 +46,15 @@ func (s *TLSSession) Read() ([]byte, error) {
 
 func (s *TLSSession) handShake() error {
 	if err := s.generateKeyExchange(); err != nil {
+		log.Errorf("Failed to generate key pair: %v", err)
 		return err
 	}
 	if err := s.clientHello(); err != nil {
+		log.Errorf("Failed to send client hello: %v", err)
+		return err
+	}
+	if err := s.serverHello(); err != nil {
+		log.Errorf("Failed to receive server hello: %v", err)
 		return err
 	}
 	return nil
@@ -67,15 +74,22 @@ func (s *TLSSession) clientHello() error {
 	if err != nil {
 		return err
 	}
-	_, err = s.conn.Write(record.Serialize())
+	bytes, err := s.conn.Write(record.Serialize())
 	if err != nil {
 		return err
 	}
+	log.Debugf("Exchanged %v bytes of client hello record", bytes)
 	return nil
 }
 
 func (s *TLSSession) serverHello() error {
-	return nil // TODO
+	buf := make([]byte, 1024)
+	read, err := s.conn.Read(buf)
+	if err != nil {
+		return err
+	}
+	log.Debugf("received from server: read=%v buf=%v", read, buf)
+	return nil
 }
 
 func (s *TLSSession) getClientHelloRecord() (*protocol.Record, error) {

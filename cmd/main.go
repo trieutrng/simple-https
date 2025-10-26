@@ -2,10 +2,14 @@ package main
 
 import (
 	"fmt"
-	"log"
 
+	log "github.com/sirupsen/logrus"
 	tlsSession "trieutrng.com/toy-tls/session"
 )
+
+func init() {
+	log.SetLevel(log.DebugLevel)
+}
 
 func main() {
 	domain := "trieutrng.github.io"
@@ -16,7 +20,7 @@ func main() {
 		log.Fatalf("%s", err)
 	}
 
-	err = session.Write([]byte("hello world"))
+	err = session.Write([]byte(fmt.Sprintf("GET / HTTP/1.1\r\nHost: %s\r\n\r\n", domain)))
 	if err != nil {
 		log.Fatalf("%s", err)
 	}
