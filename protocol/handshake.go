@@ -7,6 +7,8 @@ import (
 	"trieutrng.com/toy-tls/helpers"
 )
 
+const ClientHelloRandomLength = 32
+
 // handshake type
 type HandshakeType uint8
 
@@ -35,10 +37,10 @@ type HandShake struct {
 	Body   ExchangeObject
 }
 
-func NewHandShake(handShakeType HandshakeType, body *ExchangeObject) *HandShake {
+func NewHandShake(handShakeType HandshakeType, body ExchangeObject) *HandShake {
 	return &HandShake{
 		Type: handShakeType,
-		Body: *body,
+		Body: body,
 	}
 }
 

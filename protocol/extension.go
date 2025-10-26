@@ -98,10 +98,10 @@ type Extension struct {
 	Data   ExchangeObject
 }
 
-func NewExtension(extType ExtensionType, data *ExchangeObject) *Extension {
+func NewExtension(extType ExtensionType, data ExchangeObject) *Extension {
 	return &Extension{
 		Type: extType,
-		Data: *data,
+		Data: data,
 	}
 }
 

@@ -37,11 +37,11 @@ type Record struct {
 	Fragment        ExchangeObject
 }
 
-func NewRecord(recordType RecordContentType, protocolVersion ProtocolVersion, fragment *ExchangeObject) *Record {
+func NewRecord(recordType RecordContentType, protocolVersion ProtocolVersion, fragment ExchangeObject) *Record {
 	return &Record{
 		Type:            recordType,
 		ProtocolVersion: protocolVersion,
-		Fragment:        *fragment,
+		Fragment:        fragment,
 	}
 }
 
