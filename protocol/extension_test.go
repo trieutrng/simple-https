@@ -3,8 +3,177 @@ package protocol
 import (
 	"bytes"
 	"encoding/hex"
+	"reflect"
 	"testing"
 )
+
+func TestExtensions_Serialize(t *testing.T) {
+	ext := &Extensions{
+		Length: 40,
+		Data: []Extension{
+			{
+				Type:   Ext_ServerName,
+				Length: 24,
+				Data: &ExtServerNameList{
+					Length: 22,
+					ServerName: ServerName{
+						NameType: Host_Name,
+						Length:   19,
+						Data:     []byte("example.ulfheim.net"),
+					},
+				},
+			},
+			{
+				Type:   Ext_SignatureAlgorithms,
+				Length: 8,
+				Data: &ExtSignatureAlgorithms{
+					Length: 6,
+					SignatureAlgorithms: []SignatureAlgorithms{
+						ED25519,
+						ED448,
+						RSA_PSS_PSS_SHA256,
+					},
+				},
+			},
+		},
+	}
+	output := ext.Serialize()
+	if !bytes.Equal(output, []byte{
+		0, 40,
+		0, 0, 0, 24, 0, 22, 0, 0, 19, 101, 120, 97, 109, 112, 108, 101,
+		46, 117, 108, 102, 104, 101, 105, 109, 46, 110, 101, 116,
+		0, 13, 0, 8, 0, 6, 8, 7, 8, 8, 8, 9,
+	}) {
+		t.Errorf("output should be %v, \ngot %v", []byte{
+			0, 40,
+			0, 0, 0, 24, 0, 22, 0, 0, 19, 101, 120, 97, 109, 112, 108, 101,
+			46, 117, 108, 102, 104, 101, 105, 109, 46, 110, 101, 116,
+			0, 13, 0, 8, 0, 6, 8, 7, 8, 8, 8, 9,
+		}, output)
+	}
+}
+
+func TestExtensions_Deserialize(t *testing.T) {
+	input := []byte{
+		0, 40,
+		0, 0, 0, 24, 0, 22, 0, 0, 19, 101, 120, 97, 109, 112, 108, 101,
+		46, 117, 108, 102, 104, 101, 105, 109, 46, 110, 101, 116,
+		0, 13, 0, 8, 0, 6, 8, 7, 8, 8, 8, 9,
+	}
+	ext := &Extensions{}
+	ext.Deserialize(input)
+
+	if ext.Length != 40 {
+		t.Errorf("length should be 40, \ngot %v", ext.Length)
+	}
+	if len(ext.Data) != 2 {
+		t.Errorf("length should be 2, \ngot %v", len(ext.Data))
+	}
+	if ext.Data[0].Type != Ext_ServerName {
+		t.Errorf("type should be Ext_ServerName, \ngot %v", ext.Data[0].Type)
+	}
+	if ext.Data[0].Length != 24 {
+		t.Errorf("length should be 24, \ngot %v", ext.Data[0].Length)
+	}
+
+	serverNameList, ok := ext.Data[0].Data.(*ExtServerNameList)
+	if !ok {
+		t.Errorf("serverName should be ExtServerNameList, \ngot %v", reflect.TypeOf(serverNameList))
+	}
+	if serverNameList.Length != 22 {
+		t.Errorf("length should be 22, \ngot %v", serverNameList.Length)
+	}
+	serverName := serverNameList.ServerName
+	if serverName.NameType != Host_Name {
+		t.Errorf("type should be Host_Name, \ngot %v", serverName.NameType)
+	}
+	if serverName.Length != 19 {
+		t.Errorf("length should be 19, \ngot %v", serverName.Length)
+	}
+	if !bytes.Equal(serverName.Data, []byte("example.ulfheim.net")) {
+		t.Errorf("data should be example.ulfheim.net, \ngot %v", serverName.Data)
+	}
+
+	signatureAlgorithms, ok := ext.Data[1].Data.(*ExtSignatureAlgorithms)
+	if !ok {
+		t.Errorf("signatureAlgorithms should be ExtSignatureAlgorithms, \ngot %v", reflect.TypeOf(signatureAlgorithms))
+	}
+	if signatureAlgorithms.Length != 6 {
+		t.Errorf("length should be 6, \ngot %v", signatureAlgorithms.Length)
+	}
+	if !reflect.DeepEqual([]SignatureAlgorithms{
+		ED25519,
+		ED448,
+		RSA_PSS_PSS_SHA256,
+	}, signatureAlgorithms.SignatureAlgorithms) {
+		t.Errorf("signature algorithms should be %v, \ngot %v", []SignatureAlgorithms{
+			ED25519,
+			ED448,
+			RSA_PSS_PSS_SHA256,
+		}, signatureAlgorithms.SignatureAlgorithms)
+	}
+}
+
+func TestExtension_Serialize(t *testing.T) {
+	ext := &Extension{
+		Type:   Ext_ServerName,
+		Length: 24,
+		Data: &ExtServerNameList{
+			Length: 22,
+			ServerName: ServerName{
+				NameType: Host_Name,
+				Length:   19,
+				Data:     []byte("example.ulfheim.net"),
+			},
+		},
+	}
+	output := ext.Serialize()
+
+	if !bytes.Equal(output, []byte{
+		0, 0, 0, 24, 0, 22, 0, 0, 19, 101, 120, 97, 109, 112, 108, 101,
+		46, 117, 108, 102, 104, 101, 105, 109, 46, 110, 101, 116,
+	}) {
+		t.Errorf("output should be %v, \ngot %v", []byte{
+			0, 0, 0, 24, 0, 22, 0, 0, 19, 101, 120, 97, 109, 112, 108, 101,
+			46, 117, 108, 102, 104, 101, 105, 109, 46, 110, 101, 116,
+		}, output)
+	}
+}
+
+func TestExtension_Deserialize(t *testing.T) {
+	input := []byte{
+		0, 0, 0, 24, 0, 22, 0, 0, 19, 101, 120, 97, 109, 112, 108, 101,
+		46, 117, 108, 102, 104, 101, 105, 109, 46, 110, 101, 116,
+	}
+	ext := &Extension{}
+	ext.Deserialize(input)
+
+	if ext.Type != Ext_ServerName {
+		t.Errorf("type should be Ext_ServerName, \ngot %v", ext.Type)
+	}
+	if ext.Length != 24 {
+		t.Errorf("length should be 24, \ngot %v", ext.Length)
+	}
+
+	serverNameList, ok := ext.Data.(*ExtServerNameList)
+	if !ok {
+		t.Errorf("Data should be ExtServerNameList, \ngot %v", reflect.TypeOf(ext.Data))
+	}
+	if serverNameList.Length != 22 {
+		t.Errorf("length should be 22, \ngot %v", serverNameList.Length)
+	}
+
+	serverName := serverNameList.ServerName
+	if serverName.NameType != Host_Name {
+		t.Errorf("name type should be Host_Name, \ngot %v", serverName.NameType)
+	}
+	if serverName.Length != 19 {
+		t.Errorf("length should be 19, \ngot %v", serverName.Length)
+	}
+	if !bytes.Equal(serverName.Data, []byte("example.ulfheim.net")) {
+		t.Errorf("data should be example.ulfheim.net, \ngot %v", serverName.Data)
+	}
+}
 
 func TestExtServerNameList_Serialize(t *testing.T) {
 	ext := ExtServerNameList{
@@ -20,7 +189,10 @@ func TestExtServerNameList_Serialize(t *testing.T) {
 		0, 22, 0, 0, 19, 101, 120, 97, 109, 112, 108, 101,
 		46, 117, 108, 102, 104, 101, 105, 109, 46, 110, 101, 116,
 	}) {
-		t.Errorf("Serialize(%#v) => %#v\n", ext, output)
+		t.Errorf("output should be %v, \ngot %v", []byte{
+			0, 22, 0, 0, 19, 101, 120, 97, 109, 112, 108, 101,
+			46, 117, 108, 102, 104, 101, 105, 109, 46, 110, 101, 116,
+		}, output)
 	}
 }
 

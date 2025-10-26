@@ -71,16 +71,18 @@ func (e *Extensions) Deserialize(data []byte) int {
 	buf := bytes.NewBuffer(data)
 	_ = binary.Read(buf, binary.BigEndian, &e.Length)
 	extData := buf.Next(int(e.Length))
+	e.Data = make([]Extension, 0)
 	read := 0
 	for read < len(extData) {
 		ext := Extension{}
 		read += ext.Deserialize(extData[read:])
+		e.Data = append(e.Data, ext)
 	}
 	return len(data) - buf.Len()
 }
 
 type Extension struct {
-	Type   uint16
+	Type   ExtensionType
 	Length uint16
 	Data   ExchangeObject
 }
@@ -92,7 +94,6 @@ func (e *Extension) Serialize() []byte {
 	// length
 	_ = binary.Write(buf, binary.BigEndian, e.Length)
 	// data
-	_ = binary.Write(buf, binary.BigEndian, e.Length)
 	buf.Write(e.Data.Serialize())
 
 	return buf.Bytes()
