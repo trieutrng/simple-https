@@ -6,9 +6,12 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
-func Random(bytes int) []byte {
-	buf := make([]byte, bytes)
-	rand.Read(buf)
+func Random(len int) []byte {
+	buf := make([]byte, len)
+	_, err := rand.Read(buf)
+	if err != nil {
+		panic(err)
+	}
 	return buf
 }
 
@@ -21,7 +24,7 @@ func GetX25519KeyPair() (*KeyPair, error) {
 	privateKey := Random(32)
 	publicKey, err := curve25519.X25519(privateKey, curve25519.Basepoint)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 	return &KeyPair{privateKey, publicKey}, nil
 }

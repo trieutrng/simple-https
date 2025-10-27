@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 )
 
+const RecordHeaderLen int = 5
+
 type RecordContentType uint8
 
 const (
@@ -71,6 +73,8 @@ func newFragment(recordContentType RecordContentType) ExchangeObject {
 	switch recordContentType {
 	case Record_Handshake:
 		return &HandShake{}
+	case Record_Alert:
+		return &Alert{}
 	}
 	return nil
 }

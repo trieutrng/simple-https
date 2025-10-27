@@ -12,12 +12,12 @@ func init() {
 }
 
 func main() {
-	domain := "trieutrng.github.io"
+	domain := "jvns.ca"
 	var err error
 
 	session, err := tlsSession.NewSession(domain)
 	if err != nil {
-		log.Fatalf("%s", err)
+		log.Fatalf("Can't init new tls session - Caused by: %s", err)
 	}
 
 	err = session.Write([]byte(fmt.Sprintf("GET / HTTP/1.1\r\nHost: %s\r\n\r\n", domain)))

@@ -1,6 +1,9 @@
 package session
 
 import (
+	"bytes"
+	"errors"
+	"io"
 	"net"
 	"strings"
 
@@ -74,22 +77,52 @@ func (s *TLSSession) clientHello() error {
 	if err != nil {
 		return err
 	}
-	bytes, err := s.conn.Write(record.Serialize())
+
+	n, err := s.conn.Write(record.Serialize())
 	if err != nil {
 		return err
 	}
-	log.Debugf("Exchanged %v bytes of client hello record", bytes)
+
+	log.Debugf("Exchanged %v bytes of client hello record", n)
 	return nil
 }
 
 func (s *TLSSession) serverHello() error {
-	buf := make([]byte, 1024)
-	read, err := s.conn.Read(buf)
+	record, err := s.getRecord()
 	if err != nil {
 		return err
 	}
-	log.Debugf("received from server: read=%v buf=%v", read, buf)
+	log.Debugf("Exchanged %v bytes of server hello record", record)
 	return nil
+}
+
+func (s *TLSSession) getRecord() (*protocol.Record, error) {
+	hdr := make([]byte, protocol.RecordHeaderLen)
+	_, err := io.ReadFull(s.conn, hdr)
+	if err != nil {
+		return nil, err
+	}
+
+	bodyLen := (int(hdr[3]) << 8) | int(hdr[4])
+	body := make([]byte, bodyLen)
+	_, err = io.ReadFull(s.conn, body)
+	if err != nil {
+		return nil, err
+	}
+
+	buf := new(bytes.Buffer)
+	buf.Write(hdr)
+	buf.Write(body)
+
+	record := protocol.Record{}
+	record.Deserialize(buf.Bytes())
+
+	if record.Type == protocol.Record_Alert {
+		alert := (record.Fragment).(*protocol.Alert).String()
+		return nil, errors.New(alert)
+	}
+
+	return &record, nil
 }
 
 func (s *TLSSession) getClientHelloRecord() (*protocol.Record, error) {
@@ -110,19 +143,14 @@ func (s *TLSSession) getClientHelloRecord() (*protocol.Record, error) {
 			protocol.Ext_SignatureAlgorithms,
 			protocol.NewExtSignatureAlgorithms([]protocol.SignatureAlgorithms{
 				protocol.ECDSA_SECP256R1_SHA256,
-				protocol.ECDSA_SECP384R1_SHA384,
-				protocol.ECDSA_SECP521R1_SHA512,
-				protocol.ED25519,
-				protocol.ED448,
-				protocol.RSA_PSS_PSS_SHA256,
-				protocol.RSA_PSS_PSS_SHA384,
-				protocol.RSA_PSS_PSS_SHA512,
 				protocol.RSA_PSS_RSAE_SHA256,
-				protocol.RSA_PSS_RSAE_SHA384,
-				protocol.RSA_PSS_RSAE_SHA512,
 				protocol.RSA_PKCS1_SHA256,
+				protocol.ECDSA_SECP384R1_SHA384,
+				protocol.RSA_PSS_RSAE_SHA384,
 				protocol.RSA_PKCS1_SHA384,
+				protocol.RSA_PSS_RSAE_SHA512,
 				protocol.RSA_PKCS1_SHA512,
+				protocol.RSA_PKCS1_SHA1,
 			}),
 		),
 		*protocol.NewExtension(
@@ -149,11 +177,11 @@ func (s *TLSSession) getClientHelloRecord() (*protocol.Record, error) {
 	clientHello := protocol.NewClientHello(
 		protocol.TLS_1_2,
 		crypto.Random(32),
-		protocol.NewSessionID([]byte{0}), // legacy field, not used
+		protocol.NewSessionID([]byte{}), // legacy field, not used
 		protocol.NewCipherSuites([]protocol.CipherSuite{
 			protocol.TLS_AES_128_GCM_SHA256,
 		}),
-		protocol.NewCompressionMethod([]byte{1, 0}), // legacy field, not used. 0 means null
+		protocol.NewCompressionMethod([]byte{0}), // legacy field, not used. 0 means null
 		extensions,
 	)
 

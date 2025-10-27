@@ -25,9 +25,9 @@ const (
 type CipherSuite uint16
 
 const (
-	TLS_AES_256_GCM_SHA384            CipherSuite = 0x0d02
-	TLS_CHACHA20_POLY1305_SHA256      CipherSuite = 0x0d03
-	TLS_AES_128_GCM_SHA256            CipherSuite = 0x0d01
+	TLS_AES_256_GCM_SHA384            CipherSuite = 0x1302
+	TLS_CHACHA20_POLY1305_SHA256      CipherSuite = 0x1303
+	TLS_AES_128_GCM_SHA256            CipherSuite = 0x1301
 	TLS_EMPTY_RENEGOTIATION_INFO_SCSV CipherSuite = 0x00ff
 )
 
@@ -47,7 +47,6 @@ func NewHandShake(handShakeType HandshakeType, body ExchangeObject) *HandShake {
 func (h *HandShake) Serialize() []byte {
 	buf := new(bytes.Buffer)
 	_ = binary.Write(buf, binary.BigEndian, h.Type)
-
 	body := h.Body.Serialize()
 	buf.Write(helpers.MarshalUint24(len(body)))
 	buf.Write(body)
@@ -61,7 +60,6 @@ func (h *HandShake) Deserialize(data []byte) int {
 	h.Length = helpers.UnmarshalUint24(buf.Next(3))
 	h.Body = newHandshakeBody(h.Type)
 	h.Body.Deserialize(buf.Next(h.Length))
-
 	return len(data) - buf.Len()
 }
 

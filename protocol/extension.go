@@ -45,6 +45,7 @@ const (
 	RSA_PKCS1_SHA256       SignatureAlgorithms = 0x0401
 	RSA_PKCS1_SHA384       SignatureAlgorithms = 0x0501
 	RSA_PKCS1_SHA512       SignatureAlgorithms = 0x0601
+	RSA_PKCS1_SHA1         SignatureAlgorithms = 0x0201
 )
 
 type PSKKeyExchangeMode uint8
