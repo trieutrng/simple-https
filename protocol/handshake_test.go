@@ -94,7 +94,7 @@ func TestHandShake(t *testing.T) {
 				239, 240, 241, 242, 243, 244, 245, 246,
 				247, 248, 249, 250, 251, 252, 253, 254, 255,
 				// cipher suites
-				0, 8, 13, 2, 13, 3, 13, 1, 0, 255,
+				0, 8, 19, 2, 19, 3, 19, 1, 0, 255,
 				// legacy compression method
 				1, 0,
 				// extensions
@@ -203,7 +203,7 @@ func TestClientHello(t *testing.T) {
 				239, 240, 241, 242, 243, 244, 245, 246,
 				247, 248, 249, 250, 251, 252, 253, 254, 255,
 				// cipher suites
-				0, 8, 13, 2, 13, 3, 13, 1, 0, 255,
+				0, 8, 19, 2, 19, 3, 19, 1, 0, 255,
 				// legacy compression method
 				1, 0,
 				// extensions
@@ -288,7 +288,7 @@ func TestCipherSuites(t *testing.T) {
 					TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
 				},
 			},
-			bytes: []byte{0, 8, 13, 2, 13, 3, 13, 1, 0, 255},
+			bytes: []byte{0, 8, 19, 2, 19, 3, 19, 1, 0, 255},
 		},
 	}
 
