@@ -3,6 +3,7 @@ package session
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -92,7 +93,12 @@ func (s *TLSSession) serverHello() error {
 	if err != nil {
 		return err
 	}
-	log.Debugf("Exchanged %v bytes of server hello record", record)
+
+	serverHandshake := (record.Fragment).(*protocol.HandShake)
+	serverHello := (serverHandshake.Body).(*protocol.ServerHello)
+
+	fmt.Printf("Server chosen cipher suite: %v", serverHello.CipherSuite)
+
 	return nil
 }
 

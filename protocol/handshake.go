@@ -67,59 +67,10 @@ func newHandshakeBody(handshakeType HandshakeType) ExchangeObject {
 	switch handshakeType {
 	case HandShake_ClientHello:
 		return &ClientHello{}
+	case HandShake_ServerHello:
+		return &ServerHello{}
 	}
 	return nil
-}
-
-type ClientHello struct {
-	ProtocolVersion          ProtocolVersion
-	Random                   []byte
-	LegacySessionId          SessionID
-	CipherSuites             CipherSuites
-	LegacyCompressionMethods CompressionMethod
-	Extensions               Extensions
-}
-
-func NewClientHello(protocolVersion ProtocolVersion, random []byte, sessionId *SessionID, cipherSuites *CipherSuites, compressionMethod *CompressionMethod, extensions *Extensions) *ClientHello {
-	return &ClientHello{
-		ProtocolVersion:          protocolVersion,
-		Random:                   random,
-		LegacySessionId:          *sessionId,
-		CipherSuites:             *cipherSuites,
-		LegacyCompressionMethods: *compressionMethod,
-		Extensions:               *extensions,
-	}
-}
-
-func (c *ClientHello) Serialize() []byte {
-	buf := new(bytes.Buffer)
-	_ = binary.Write(buf, binary.BigEndian, c.ProtocolVersion)
-	buf.Write(c.Random)
-	buf.Write(c.LegacySessionId.Serialize())
-	buf.Write(c.CipherSuites.Serialize())
-	buf.Write(c.LegacyCompressionMethods.Serialize())
-	buf.Write(c.Extensions.Serialize())
-	return buf.Bytes()
-}
-
-func (c *ClientHello) Deserialize(data []byte) int {
-	buf := bytes.NewBuffer(data)
-	_ = binary.Read(buf, binary.BigEndian, &c.ProtocolVersion)
-	// random has 32 bytes
-	c.Random = make([]byte, 32)
-	copy(c.Random, buf.Next(32))
-	c.LegacySessionId = SessionID{}
-	c.CipherSuites = CipherSuites{}
-	c.LegacyCompressionMethods = CompressionMethod{}
-	c.Extensions = Extensions{}
-
-	read := len(data) - buf.Len()
-	read += c.LegacySessionId.Deserialize(data[read:])
-	read += c.CipherSuites.Deserialize(data[read:])
-	read += c.LegacyCompressionMethods.Deserialize(data[read:])
-	read += c.Extensions.Deserialize(data[read:])
-
-	return read
 }
 
 type SessionID struct {
@@ -211,4 +162,111 @@ func (c *CompressionMethod) Deserialize(data []byte) int {
 	c.Data = make([]byte, c.Length)
 	copy(c.Data, buf.Next(int(c.Length)))
 	return len(data) - buf.Len()
+}
+
+type ClientHello struct {
+	ProtocolVersion          ProtocolVersion
+	Random                   []byte
+	LegacySessionId          SessionID
+	CipherSuites             CipherSuites
+	LegacyCompressionMethods CompressionMethod
+	Extensions               Extensions
+}
+
+func NewClientHello(protocolVersion ProtocolVersion, random []byte, sessionId *SessionID, cipherSuites *CipherSuites, compressionMethod *CompressionMethod, extensions *Extensions) *ClientHello {
+	return &ClientHello{
+		ProtocolVersion:          protocolVersion,
+		Random:                   random,
+		LegacySessionId:          *sessionId,
+		CipherSuites:             *cipherSuites,
+		LegacyCompressionMethods: *compressionMethod,
+		Extensions:               *extensions,
+	}
+}
+
+func (c *ClientHello) Serialize() []byte {
+	buf := new(bytes.Buffer)
+	_ = binary.Write(buf, binary.BigEndian, c.ProtocolVersion)
+	buf.Write(c.Random)
+	buf.Write(c.LegacySessionId.Serialize())
+	buf.Write(c.CipherSuites.Serialize())
+	buf.Write(c.LegacyCompressionMethods.Serialize())
+	buf.Write(c.Extensions.Serialize())
+	return buf.Bytes()
+}
+
+func (c *ClientHello) Deserialize(data []byte) int {
+	buf := bytes.NewBuffer(data)
+	_ = binary.Read(buf, binary.BigEndian, &c.ProtocolVersion)
+	// random has 32 bytes
+	c.Random = make([]byte, 32)
+	copy(c.Random, buf.Next(32))
+	c.LegacySessionId = SessionID{}
+	c.CipherSuites = CipherSuites{}
+	c.LegacyCompressionMethods = CompressionMethod{}
+	c.Extensions = Extensions{}
+
+	read := len(data) - buf.Len()
+	read += c.LegacySessionId.Deserialize(data[read:])
+	read += c.CipherSuites.Deserialize(data[read:])
+	read += c.LegacyCompressionMethods.Deserialize(data[read:])
+	read += c.Extensions.Deserialize(data[read:])
+
+	return read
+}
+
+type ServerHello struct {
+	ProtocolVersion         ProtocolVersion
+	Random                  []byte
+	LegacySessionId         SessionID
+	CipherSuite             CipherSuite
+	LegacyCompressionMethod byte // always 0
+	Extensions              Extensions
+}
+
+func NewServerHello(protocolVersion ProtocolVersion, random []byte, sessionId *SessionID, cipherSuite CipherSuite, extensions *Extensions) *ServerHello {
+	return &ServerHello{
+		ProtocolVersion:         protocolVersion,
+		Random:                  random,
+		LegacySessionId:         *sessionId,
+		CipherSuite:             cipherSuite,
+		LegacyCompressionMethod: 0,
+		Extensions:              *extensions,
+	}
+}
+
+func (s *ServerHello) Serialize() []byte {
+	buf := new(bytes.Buffer)
+	_ = binary.Write(buf, binary.BigEndian, s.ProtocolVersion)
+	buf.Write(s.Random)
+	buf.Write(s.LegacySessionId.Serialize())
+	_ = binary.Write(buf, binary.BigEndian, s.CipherSuite)
+	_ = binary.Write(buf, binary.BigEndian, byte(0)) // compression method, always 0 for server hello
+	buf.Write(s.Extensions.Serialize())
+	return buf.Bytes()
+}
+
+func (s *ServerHello) Deserialize(data []byte) int {
+	buf := bytes.NewBuffer(data)
+	_ = binary.Read(buf, binary.BigEndian, &s.ProtocolVersion)
+
+	// random has 32 bytes
+	s.Random = make([]byte, 32)
+	copy(s.Random, buf.Next(32))
+
+	read := len(data) - buf.Len()
+
+	s.LegacySessionId = SessionID{}
+	read += s.LegacySessionId.Deserialize(data[read:])
+
+	s.CipherSuite = CipherSuite(uint16(data[read])<<8 | uint16(data[read+1]))
+	read += 2
+
+	s.LegacyCompressionMethod = data[read]
+	read += 1
+
+	s.Extensions = Extensions{}
+	read += s.Extensions.Deserialize(data[read:])
+
+	return read
 }

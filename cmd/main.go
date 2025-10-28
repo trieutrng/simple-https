@@ -4,15 +4,17 @@ import (
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
+	"trieutrng.com/toy-tls/config"
 	tlsSession "trieutrng.com/toy-tls/session"
 )
 
 func init() {
+	log.SetFormatter(&config.Log4jFormatter{})
 	log.SetLevel(log.DebugLevel)
 }
 
 func main() {
-	domain := "jvns.ca"
+	domain := "trieutrng.github.io"
 	var err error
 
 	session, err := tlsSession.NewSession(domain)
