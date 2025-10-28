@@ -9,8 +9,10 @@ import (
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+	"trieutrng.com/toy-tls/common"
 	"trieutrng.com/toy-tls/crypto"
 	"trieutrng.com/toy-tls/protocol"
+	"trieutrng.com/toy-tls/protocol/client"
 )
 
 type TLSSession struct {
@@ -97,8 +99,12 @@ func (s *TLSSession) serverHello() error {
 	serverHandshake := (record.Fragment).(*protocol.HandShake)
 	serverHello := (serverHandshake.Body).(*protocol.ServerHello)
 
-	fmt.Printf("Server chosen cipher suite: %v", serverHello.CipherSuite)
-
+	fmt.Printf("Server chosen cipher suite: %v\n", serverHello.CipherSuite)
+	fmt.Printf("Server returned %d extensions\n", len(serverHello.Extensions.Data))
+	fmt.Println("Extensions:")
+	for _, extension := range serverHello.Extensions.Data {
+		fmt.Printf("\t%v\n", extension.Data)
+	}
 	return nil
 }
 
@@ -132,60 +138,60 @@ func (s *TLSSession) getRecord() (*protocol.Record, error) {
 }
 
 func (s *TLSSession) getClientHelloRecord() (*protocol.Record, error) {
-	extensions := protocol.NewExtensions([]protocol.Extension{
-		*protocol.NewExtension(
-			protocol.Ext_ServerName,
-			protocol.NewExtServerNameList(
-				protocol.NewServerName(protocol.Host_Name, []byte(s.domain)),
+	extensions := client.NewExtensions([]client.Extension{
+		*client.NewExtension(
+			common.Ext_ServerName,
+			client.NewExtServerNameList(
+				client.NewServerName(common.Host_Name, []byte(s.domain)),
 			),
 		),
-		*protocol.NewExtension(
-			protocol.Ext_SupportedGroups,
-			protocol.NewExtSupportedGroups([]protocol.NamedCurve{
-				protocol.X25519,
+		*client.NewExtension(
+			common.Ext_SupportedGroups,
+			client.NewExtSupportedGroups([]common.NamedCurve{
+				common.X25519,
 			}),
 		),
-		*protocol.NewExtension(
-			protocol.Ext_SignatureAlgorithms,
-			protocol.NewExtSignatureAlgorithms([]protocol.SignatureAlgorithms{
-				protocol.ECDSA_SECP256R1_SHA256,
-				protocol.RSA_PSS_RSAE_SHA256,
-				protocol.RSA_PKCS1_SHA256,
-				protocol.ECDSA_SECP384R1_SHA384,
-				protocol.RSA_PSS_RSAE_SHA384,
-				protocol.RSA_PKCS1_SHA384,
-				protocol.RSA_PSS_RSAE_SHA512,
-				protocol.RSA_PKCS1_SHA512,
-				protocol.RSA_PKCS1_SHA1,
+		*client.NewExtension(
+			common.Ext_SignatureAlgorithms,
+			client.NewExtSignatureAlgorithms([]common.SignatureAlgorithms{
+				common.ECDSA_SECP256R1_SHA256,
+				common.RSA_PSS_RSAE_SHA256,
+				common.RSA_PKCS1_SHA256,
+				common.ECDSA_SECP384R1_SHA384,
+				common.RSA_PSS_RSAE_SHA384,
+				common.RSA_PKCS1_SHA384,
+				common.RSA_PSS_RSAE_SHA512,
+				common.RSA_PKCS1_SHA512,
+				common.RSA_PKCS1_SHA1,
 			}),
 		),
-		*protocol.NewExtension(
-			protocol.Ext_KeyShare,
-			protocol.NewExtKeyShare(
-				protocol.X25519,
+		*client.NewExtension(
+			common.Ext_KeyShare,
+			client.NewExtKeyShare(
+				common.X25519,
 				s.keyPair.Public,
 			),
 		),
-		*protocol.NewExtension(
-			protocol.Ext_PSKKeyExchangeModes,
-			protocol.NewExtPSKKeyExchangeModes([]protocol.PSKKeyExchangeMode{
-				protocol.PSK_DHE_KE,
+		*client.NewExtension(
+			common.Ext_PSKKeyExchangeModes,
+			client.NewExtPSKKeyExchangeModes([]common.PSKKeyExchangeMode{
+				common.PSK_DHE_KE,
 			}),
 		),
-		*protocol.NewExtension(
-			protocol.Ext_SupportedVersions,
-			protocol.NewExtSupportedVersions([]protocol.ProtocolVersion{
-				protocol.TLS_1_3,
+		*client.NewExtension(
+			common.Ext_SupportedVersions,
+			client.NewExtSupportedVersions([]common.ProtocolVersion{
+				common.TLS_1_3,
 			}),
 		),
 	})
 
 	clientHello := protocol.NewClientHello(
-		protocol.TLS_1_2,
+		common.TLS_1_2,
 		crypto.Random(32),
 		protocol.NewSessionID([]byte{}), // legacy field, not used
-		protocol.NewCipherSuites([]protocol.CipherSuite{
-			protocol.TLS_AES_128_GCM_SHA256,
+		protocol.NewCipherSuites([]common.CipherSuite{
+			common.TLS_AES_128_GCM_SHA256,
 		}),
 		protocol.NewCompressionMethod([]byte{0}), // legacy field, not used. 0 means null
 		extensions,
@@ -193,8 +199,8 @@ func (s *TLSSession) getClientHelloRecord() (*protocol.Record, error) {
 
 	return protocol.NewRecord(
 		protocol.Record_Handshake,
-		protocol.TLS_1_0,
-		protocol.NewHandShake(protocol.HandShake_ClientHello, clientHello),
+		common.TLS_1_0,
+		protocol.NewHandShake(common.HandShake_ClientHello, clientHello),
 	), nil
 }
 

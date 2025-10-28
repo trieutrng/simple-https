@@ -1,57 +1,11 @@
-package protocol
+package client
 
 import (
 	"bytes"
 	"encoding/binary"
-)
+	"fmt"
 
-type ExtensionType uint16
-
-const (
-	Ext_ServerName          ExtensionType = 0x00
-	Ext_SupportedGroups     ExtensionType = 0x0a
-	Ext_SignatureAlgorithms ExtensionType = 0x0d
-	Ext_KeyShare            ExtensionType = 0x33
-	Ext_PSKKeyExchangeModes ExtensionType = 0x2d
-	Ext_SupportedVersions   ExtensionType = 0x2b
-)
-
-type ServerNameType byte
-
-const (
-	Host_Name ServerNameType = 0
-)
-
-type NamedCurve uint16
-
-const (
-	X25519 NamedCurve = 0x001d
-)
-
-type SignatureAlgorithms uint16
-
-const (
-	ECDSA_SECP256R1_SHA256 SignatureAlgorithms = 0x0403
-	ECDSA_SECP384R1_SHA384 SignatureAlgorithms = 0x0503
-	ECDSA_SECP521R1_SHA512 SignatureAlgorithms = 0x0603
-	ED25519                SignatureAlgorithms = 0x0807
-	ED448                  SignatureAlgorithms = 0x0808
-	RSA_PSS_PSS_SHA256     SignatureAlgorithms = 0x0809
-	RSA_PSS_PSS_SHA384     SignatureAlgorithms = 0x080a
-	RSA_PSS_PSS_SHA512     SignatureAlgorithms = 0x080b
-	RSA_PSS_RSAE_SHA256    SignatureAlgorithms = 0x0804
-	RSA_PSS_RSAE_SHA384    SignatureAlgorithms = 0x0805
-	RSA_PSS_RSAE_SHA512    SignatureAlgorithms = 0x0806
-	RSA_PKCS1_SHA256       SignatureAlgorithms = 0x0401
-	RSA_PKCS1_SHA384       SignatureAlgorithms = 0x0501
-	RSA_PKCS1_SHA512       SignatureAlgorithms = 0x0601
-	RSA_PKCS1_SHA1         SignatureAlgorithms = 0x0201
-)
-
-type PSKKeyExchangeMode uint8
-
-const (
-	PSK_DHE_KE PSKKeyExchangeMode = 0x01
+	"trieutrng.com/toy-tls/common"
 )
 
 type Extensions struct {
@@ -94,12 +48,12 @@ func (e *Extensions) Deserialize(data []byte) int {
 }
 
 type Extension struct {
-	Type   ExtensionType
+	Type   common.ExtensionType
 	Length uint16
-	Data   ExchangeObject
+	Data   common.ExchangeObject
 }
 
-func NewExtension(extType ExtensionType, data ExchangeObject) *Extension {
+func NewExtension(extType common.ExtensionType, data common.ExchangeObject) *Extension {
 	return &Extension{
 		Type: extType,
 		Data: data,
@@ -126,19 +80,19 @@ func (e *Extension) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
-func newExtension(extType ExtensionType) ExchangeObject {
+func newExtension(extType common.ExtensionType) common.ExchangeObject {
 	switch extType {
-	case Ext_ServerName:
+	case common.Ext_ServerName:
 		return &ExtServerNameList{}
-	case Ext_SupportedGroups:
+	case common.Ext_SupportedGroups:
 		return &ExtSupportedGroups{}
-	case Ext_SignatureAlgorithms:
+	case common.Ext_SignatureAlgorithms:
 		return &ExtSignatureAlgorithms{}
-	case Ext_KeyShare:
+	case common.Ext_KeyShare:
 		return &ExtKeyShare{}
-	case Ext_PSKKeyExchangeModes:
+	case common.Ext_PSKKeyExchangeModes:
 		return &ExtPSKKeyExchangeModes{}
-	case Ext_SupportedVersions:
+	case common.Ext_SupportedVersions:
 		return &ExtSupportedVersions{}
 	}
 	return nil
@@ -171,13 +125,17 @@ func (e *ExtServerNameList) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
+func (e *ExtServerNameList) String() string {
+	return fmt.Sprintf("Server name list: \n\t%s", e.ServerName.String())
+}
+
 type ServerName struct {
-	NameType ServerNameType
+	NameType common.ServerNameType
 	Length   uint16
 	Data     []byte
 }
 
-func NewServerName(nameType ServerNameType, name []byte) *ServerName {
+func NewServerName(nameType common.ServerNameType, name []byte) *ServerName {
 	return &ServerName{
 		NameType: nameType,
 		Data:     name,
@@ -201,12 +159,16 @@ func (s *ServerName) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
-type ExtSupportedGroups struct {
-	Length     uint16
-	NamedCurve []NamedCurve
+func (s *ServerName) String() string {
+	return fmt.Sprintf("Server name: %s", string(s.Data))
 }
 
-func NewExtSupportedGroups(namedCurve []NamedCurve) *ExtSupportedGroups {
+type ExtSupportedGroups struct {
+	Length     uint16
+	NamedCurve []common.NamedCurve
+}
+
+func NewExtSupportedGroups(namedCurve []common.NamedCurve) *ExtSupportedGroups {
 	return &ExtSupportedGroups{
 		NamedCurve: namedCurve,
 	}
@@ -229,10 +191,10 @@ func (e *ExtSupportedGroups) Serialize() []byte {
 func (e *ExtSupportedGroups) Deserialize(data []byte) int {
 	buf := bytes.NewBuffer(data)
 	_ = binary.Read(buf, binary.BigEndian, &e.Length)
-	e.NamedCurve = make([]NamedCurve, 0)
+	e.NamedCurve = make([]common.NamedCurve, 0)
 	read := 0
 	for read < int(e.Length) {
-		var curve NamedCurve
+		var curve common.NamedCurve
 		_ = binary.Read(buf, binary.BigEndian, &curve)
 		e.NamedCurve = append(e.NamedCurve, curve)
 		read += 2
@@ -240,12 +202,16 @@ func (e *ExtSupportedGroups) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
-type ExtSignatureAlgorithms struct {
-	Length              uint16
-	SignatureAlgorithms []SignatureAlgorithms
+func (e *ExtSupportedGroups) String() string {
+	return fmt.Sprintf("Supported groups: %v", e.NamedCurve)
 }
 
-func NewExtSignatureAlgorithms(signatureAlgorithms []SignatureAlgorithms) *ExtSignatureAlgorithms {
+type ExtSignatureAlgorithms struct {
+	Length              uint16
+	SignatureAlgorithms []common.SignatureAlgorithms
+}
+
+func NewExtSignatureAlgorithms(signatureAlgorithms []common.SignatureAlgorithms) *ExtSignatureAlgorithms {
 	return &ExtSignatureAlgorithms{
 		SignatureAlgorithms: signatureAlgorithms,
 	}
@@ -268,10 +234,10 @@ func (e *ExtSignatureAlgorithms) Serialize() []byte {
 func (e *ExtSignatureAlgorithms) Deserialize(data []byte) int {
 	buf := bytes.NewBuffer(data)
 	_ = binary.Read(buf, binary.BigEndian, &e.Length)
-	e.SignatureAlgorithms = make([]SignatureAlgorithms, 0)
+	e.SignatureAlgorithms = make([]common.SignatureAlgorithms, 0)
 	read := 0
 	for read < int(e.Length) {
-		var algorithm SignatureAlgorithms
+		var algorithm common.SignatureAlgorithms
 		_ = binary.Read(buf, binary.BigEndian, &algorithm)
 		e.SignatureAlgorithms = append(e.SignatureAlgorithms, algorithm)
 		read += 2
@@ -279,14 +245,18 @@ func (e *ExtSignatureAlgorithms) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
+func (e *ExtSignatureAlgorithms) String() string {
+	return fmt.Sprintf("Signature algorithms: %v", e.SignatureAlgorithms)
+}
+
 type ExtKeyShare struct {
 	Length      uint16
-	Group       NamedCurve
+	Group       common.NamedCurve
 	KeyLength   uint16
 	KeyExchange []byte
 }
 
-func NewExtKeyShare(group NamedCurve, key []byte) *ExtKeyShare {
+func NewExtKeyShare(group common.NamedCurve, key []byte) *ExtKeyShare {
 	return &ExtKeyShare{
 		Group:       group,
 		KeyExchange: key,
@@ -312,12 +282,16 @@ func (e *ExtKeyShare) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
-type ExtPSKKeyExchangeModes struct {
-	Length              uint8
-	PSKKeyExchangeModes []PSKKeyExchangeMode
+func (e *ExtKeyShare) String() string {
+	return fmt.Sprintf("Key share: \n\t\tgroup: %v \n\t\tkey: %v", e.Group, e.KeyExchange[:e.KeyLength])
 }
 
-func NewExtPSKKeyExchangeModes(pskKeyExchangeModes []PSKKeyExchangeMode) *ExtPSKKeyExchangeModes {
+type ExtPSKKeyExchangeModes struct {
+	Length              uint8
+	PSKKeyExchangeModes []common.PSKKeyExchangeMode
+}
+
+func NewExtPSKKeyExchangeModes(pskKeyExchangeModes []common.PSKKeyExchangeMode) *ExtPSKKeyExchangeModes {
 	return &ExtPSKKeyExchangeModes{
 		PSKKeyExchangeModes: pskKeyExchangeModes,
 	}
@@ -340,10 +314,10 @@ func (e *ExtPSKKeyExchangeModes) Serialize() []byte {
 func (e *ExtPSKKeyExchangeModes) Deserialize(data []byte) int {
 	buf := bytes.NewBuffer(data)
 	_ = binary.Read(buf, binary.BigEndian, &e.Length)
-	e.PSKKeyExchangeModes = make([]PSKKeyExchangeMode, 0)
+	e.PSKKeyExchangeModes = make([]common.PSKKeyExchangeMode, 0)
 	read := 0
 	for read < int(e.Length) {
-		var pskMode PSKKeyExchangeMode
+		var pskMode common.PSKKeyExchangeMode
 		_ = binary.Read(buf, binary.BigEndian, &pskMode)
 		e.PSKKeyExchangeModes = append(e.PSKKeyExchangeModes, pskMode)
 		read += 1
@@ -351,12 +325,16 @@ func (e *ExtPSKKeyExchangeModes) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
-type ExtSupportedVersions struct {
-	Length            uint8
-	SupportedVersions []ProtocolVersion
+func (e *ExtPSKKeyExchangeModes) String() string {
+	return fmt.Sprintf("PSK Key Exchange Modes: %v", e.PSKKeyExchangeModes)
 }
 
-func NewExtSupportedVersions(versions []ProtocolVersion) *ExtSupportedVersions {
+type ExtSupportedVersions struct {
+	Length            uint8
+	SupportedVersions []common.ProtocolVersion
+}
+
+func NewExtSupportedVersions(versions []common.ProtocolVersion) *ExtSupportedVersions {
 	return &ExtSupportedVersions{
 		SupportedVersions: versions,
 	}
@@ -379,13 +357,17 @@ func (e *ExtSupportedVersions) Serialize() []byte {
 func (e *ExtSupportedVersions) Deserialize(data []byte) int {
 	buf := bytes.NewBuffer(data)
 	_ = binary.Read(buf, binary.BigEndian, &e.Length)
-	e.SupportedVersions = make([]ProtocolVersion, 0)
+	e.SupportedVersions = make([]common.ProtocolVersion, 0)
 	read := 0
 	for read < int(e.Length) {
-		var protocolVersion ProtocolVersion
+		var protocolVersion common.ProtocolVersion
 		_ = binary.Read(buf, binary.BigEndian, &protocolVersion)
 		e.SupportedVersions = append(e.SupportedVersions, protocolVersion)
 		read += 2
 	}
 	return len(data) - buf.Len()
+}
+
+func (e *ExtSupportedVersions) String() string {
+	return fmt.Sprintf("Supported Versions: %v", e.SupportedVersions)
 }

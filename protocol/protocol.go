@@ -3,6 +3,8 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
+
+	"trieutrng.com/toy-tls/common"
 )
 
 const RecordHeaderLen int = 5
@@ -18,28 +20,14 @@ const (
 	Record_Heartbeat        RecordContentType = 0x18
 )
 
-// protocol version
-type ProtocolVersion uint16
-
-const (
-	TLS_1_0 ProtocolVersion = 0x0301
-	TLS_1_2 ProtocolVersion = 0x0303
-	TLS_1_3 ProtocolVersion = 0x0304
-)
-
-type ExchangeObject interface {
-	Serialize() []byte
-	Deserialize([]byte) int
-}
-
 type Record struct {
 	Type            RecordContentType
-	ProtocolVersion ProtocolVersion
+	ProtocolVersion common.ProtocolVersion
 	Length          uint16
-	Fragment        ExchangeObject
+	Fragment        common.ExchangeObject
 }
 
-func NewRecord(recordType RecordContentType, protocolVersion ProtocolVersion, fragment ExchangeObject) *Record {
+func NewRecord(recordType RecordContentType, protocolVersion common.ProtocolVersion, fragment common.ExchangeObject) *Record {
 	return &Record{
 		Type:            recordType,
 		ProtocolVersion: protocolVersion,
@@ -69,7 +57,7 @@ func (r *Record) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
-func newFragment(recordContentType RecordContentType) ExchangeObject {
+func newFragment(recordContentType RecordContentType) common.ExchangeObject {
 	switch recordContentType {
 	case Record_Handshake:
 		return &HandShake{}

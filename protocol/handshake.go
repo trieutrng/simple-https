@@ -4,40 +4,19 @@ import (
 	"bytes"
 	"encoding/binary"
 
+	"trieutrng.com/toy-tls/common"
 	"trieutrng.com/toy-tls/helpers"
-)
-
-const ClientHelloRandomLength = 32
-
-// handshake type
-type HandshakeType uint8
-
-const (
-	HandShake_ClientHello         HandshakeType = 0x01
-	HandShake_ServerHello         HandshakeType = 0x02
-	HandShake_EncryptedExtensions HandshakeType = 0x08
-	HandShake_Certificate         HandshakeType = 0x0b
-	HandShake_CertificateRequest  HandshakeType = 0x0d
-	HandShake_CertificateVerify   HandshakeType = 0x0f
-	HandShake_Finished            HandshakeType = 0x14
-)
-
-type CipherSuite uint16
-
-const (
-	TLS_AES_256_GCM_SHA384            CipherSuite = 0x1302
-	TLS_CHACHA20_POLY1305_SHA256      CipherSuite = 0x1303
-	TLS_AES_128_GCM_SHA256            CipherSuite = 0x1301
-	TLS_EMPTY_RENEGOTIATION_INFO_SCSV CipherSuite = 0x00ff
+	"trieutrng.com/toy-tls/protocol/client"
+	"trieutrng.com/toy-tls/protocol/server"
 )
 
 type HandShake struct {
-	Type   HandshakeType
+	Type   common.HandshakeType
 	Length int // the actual type is uint24 as RFC8446, using int as placeholder, would treat it as uint24 in the serializing and deserializing
-	Body   ExchangeObject
+	Body   common.ExchangeObject
 }
 
-func NewHandShake(handShakeType HandshakeType, body ExchangeObject) *HandShake {
+func NewHandShake(handShakeType common.HandshakeType, body common.ExchangeObject) *HandShake {
 	return &HandShake{
 		Type: handShakeType,
 		Body: body,
@@ -63,11 +42,11 @@ func (h *HandShake) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
-func newHandshakeBody(handshakeType HandshakeType) ExchangeObject {
+func newHandshakeBody(handshakeType common.HandshakeType) common.ExchangeObject {
 	switch handshakeType {
-	case HandShake_ClientHello:
+	case common.HandShake_ClientHello:
 		return &ClientHello{}
-	case HandShake_ServerHello:
+	case common.HandShake_ServerHello:
 		return &ServerHello{}
 	}
 	return nil
@@ -101,10 +80,10 @@ func (s *SessionID) Deserialize(data []byte) int {
 
 type CipherSuites struct {
 	Length       uint16
-	CipherSuites []CipherSuite
+	CipherSuites []common.CipherSuite
 }
 
-func NewCipherSuites(cipherSuites []CipherSuite) *CipherSuites {
+func NewCipherSuites(cipherSuites []common.CipherSuite) *CipherSuites {
 	return &CipherSuites{
 		CipherSuites: cipherSuites,
 	}
@@ -127,10 +106,10 @@ func (s *CipherSuites) Serialize() []byte {
 func (s *CipherSuites) Deserialize(data []byte) int {
 	buf := bytes.NewBuffer(data)
 	_ = binary.Read(buf, binary.BigEndian, &s.Length)
-	s.CipherSuites = make([]CipherSuite, 0)
+	s.CipherSuites = make([]common.CipherSuite, 0)
 	read := 0
 	for read < int(s.Length) {
-		var cipherSuite CipherSuite
+		var cipherSuite common.CipherSuite
 		_ = binary.Read(buf, binary.BigEndian, &cipherSuite)
 		s.CipherSuites = append(s.CipherSuites, cipherSuite)
 		read += 2
@@ -165,15 +144,15 @@ func (c *CompressionMethod) Deserialize(data []byte) int {
 }
 
 type ClientHello struct {
-	ProtocolVersion          ProtocolVersion
+	ProtocolVersion          common.ProtocolVersion
 	Random                   []byte
 	LegacySessionId          SessionID
 	CipherSuites             CipherSuites
 	LegacyCompressionMethods CompressionMethod
-	Extensions               Extensions
+	Extensions               client.Extensions
 }
 
-func NewClientHello(protocolVersion ProtocolVersion, random []byte, sessionId *SessionID, cipherSuites *CipherSuites, compressionMethod *CompressionMethod, extensions *Extensions) *ClientHello {
+func NewClientHello(protocolVersion common.ProtocolVersion, random []byte, sessionId *SessionID, cipherSuites *CipherSuites, compressionMethod *CompressionMethod, extensions *client.Extensions) *ClientHello {
 	return &ClientHello{
 		ProtocolVersion:          protocolVersion,
 		Random:                   random,
@@ -204,7 +183,7 @@ func (c *ClientHello) Deserialize(data []byte) int {
 	c.LegacySessionId = SessionID{}
 	c.CipherSuites = CipherSuites{}
 	c.LegacyCompressionMethods = CompressionMethod{}
-	c.Extensions = Extensions{}
+	c.Extensions = client.Extensions{}
 
 	read := len(data) - buf.Len()
 	read += c.LegacySessionId.Deserialize(data[read:])
@@ -216,15 +195,15 @@ func (c *ClientHello) Deserialize(data []byte) int {
 }
 
 type ServerHello struct {
-	ProtocolVersion         ProtocolVersion
+	ProtocolVersion         common.ProtocolVersion
 	Random                  []byte
 	LegacySessionId         SessionID
-	CipherSuite             CipherSuite
+	CipherSuite             common.CipherSuite
 	LegacyCompressionMethod byte // always 0
-	Extensions              Extensions
+	Extensions              server.Extensions
 }
 
-func NewServerHello(protocolVersion ProtocolVersion, random []byte, sessionId *SessionID, cipherSuite CipherSuite, extensions *Extensions) *ServerHello {
+func NewServerHello(protocolVersion common.ProtocolVersion, random []byte, sessionId *SessionID, cipherSuite common.CipherSuite, extensions *server.Extensions) *ServerHello {
 	return &ServerHello{
 		ProtocolVersion:         protocolVersion,
 		Random:                  random,
@@ -259,13 +238,13 @@ func (s *ServerHello) Deserialize(data []byte) int {
 	s.LegacySessionId = SessionID{}
 	read += s.LegacySessionId.Deserialize(data[read:])
 
-	s.CipherSuite = CipherSuite(uint16(data[read])<<8 | uint16(data[read+1]))
+	s.CipherSuite = common.CipherSuite(uint16(data[read])<<8 | uint16(data[read+1]))
 	read += 2
 
 	s.LegacyCompressionMethod = data[read]
 	read += 1
 
-	s.Extensions = Extensions{}
+	s.Extensions = server.Extensions{}
 	read += s.Extensions.Deserialize(data[read:])
 
 	return read

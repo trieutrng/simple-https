@@ -1,10 +1,11 @@
-package protocol
+package server
 
 import (
 	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"trieutrng.com/toy-tls/common"
 )
 
 func TestExtensions(t *testing.T) {
@@ -14,38 +15,32 @@ func TestExtensions(t *testing.T) {
 	}{
 		{
 			literal: Extensions{
-				Length: 40,
+				Length: 18,
 				Data: []Extension{
 					{
-						Type:   Ext_ServerName,
-						Length: 24,
-						Data: &ExtServerNameList{
-							Length: 22,
-							ServerName: ServerName{
-								NameType: Host_Name,
-								Length:   19,
-								Data:     []byte("example.ulfheim.net"),
-							},
+						Type:   common.Ext_SupportedVersions,
+						Length: 2,
+						Data: &ExtSupportedVersions{
+							SupportedVersion: common.TLS_1_3,
 						},
 					},
 					{
-						Type:   Ext_SignatureAlgorithms,
+						Type:   common.Ext_SignatureAlgorithms,
 						Length: 8,
 						Data: &ExtSignatureAlgorithms{
 							Length: 6,
-							SignatureAlgorithms: []SignatureAlgorithms{
-								ED25519,
-								ED448,
-								RSA_PSS_PSS_SHA256,
+							SignatureAlgorithms: []common.SignatureAlgorithms{
+								common.ED25519,
+								common.ED448,
+								common.RSA_PSS_PSS_SHA256,
 							},
 						},
 					},
 				},
 			},
 			bytes: []byte{
-				0, 40,
-				0, 0, 0, 24, 0, 22, 0, 0, 19, 101, 120, 97, 109, 112, 108, 101,
-				46, 117, 108, 102, 104, 101, 105, 109, 46, 110, 101, 116,
+				0, 18,
+				0, 43, 0, 2, 3, 4,
 				0, 13, 0, 8, 0, 6, 8, 7, 8, 8, 8, 9,
 			},
 		},
@@ -76,21 +71,14 @@ func TestExtension(t *testing.T) {
 	}{
 		{
 			literal: Extension{
-				Type:   Ext_ServerName,
-				Length: 24,
-				Data: &ExtServerNameList{
-					Length: 22,
-					ServerName: ServerName{
-						NameType: Host_Name,
-						Length:   19,
-						Data:     []byte("example.ulfheim.net"),
-					},
+				Type:   common.Ext_SupportedGroups,
+				Length: 4,
+				Data: &ExtSupportedGroups{
+					Length:     2,
+					NamedCurve: []common.NamedCurve{common.X25519},
 				},
 			},
-			bytes: []byte{
-				0, 0, 0, 24, 0, 22, 0, 0, 19, 101, 120, 97, 109, 112, 108, 101,
-				46, 117, 108, 102, 104, 101, 105, 109, 46, 110, 101, 116,
-			},
+			bytes: []byte{0, 10, 0, 4, 0, 2, 0, 29},
 		},
 	}
 
@@ -112,45 +100,6 @@ func TestExtension(t *testing.T) {
 	})
 }
 
-func TestExtServerNameList(t *testing.T) {
-	testSuites := []struct {
-		literal ExtServerNameList
-		bytes   []byte
-	}{
-		{
-			literal: ExtServerNameList{
-				Length: 22,
-				ServerName: ServerName{
-					NameType: Host_Name,
-					Length:   19,
-					Data:     []byte("example.ulfheim.net"),
-				},
-			},
-			bytes: []byte{
-				0, 22, 0, 0, 19, 101, 120, 97, 109, 112, 108, 101,
-				46, 117, 108, 102, 104, 101, 105, 109, 46, 110, 101, 116,
-			},
-		},
-	}
-
-	t.Run("Serialize", func(t *testing.T) {
-		for _, test := range testSuites {
-			serialized := test.literal.Serialize()
-			assert.Equal(t, test.bytes, serialized)
-		}
-	})
-
-	t.Run("Deserialize", func(t *testing.T) {
-		for _, test := range testSuites {
-			extServerNameList := ExtServerNameList{}
-			read := extServerNameList.Deserialize(test.bytes)
-
-			assert.Equal(t, len(test.bytes), read)
-			assert.Equal(t, test.literal, extServerNameList)
-		}
-	})
-}
-
 func TestExtSupportedGroups(t *testing.T) {
 	testSuites := []struct {
 		literal ExtSupportedGroups
@@ -159,7 +108,7 @@ func TestExtSupportedGroups(t *testing.T) {
 		{
 			literal: ExtSupportedGroups{
 				Length:     2,
-				NamedCurve: []NamedCurve{X25519},
+				NamedCurve: []common.NamedCurve{common.X25519},
 			},
 			bytes: []byte{0, 2, 0, 29},
 		},
@@ -191,21 +140,21 @@ func TestExtSignatureAlgorithms(t *testing.T) {
 		{
 			literal: ExtSignatureAlgorithms{
 				Length: 28,
-				SignatureAlgorithms: []SignatureAlgorithms{
-					ECDSA_SECP256R1_SHA256,
-					ECDSA_SECP384R1_SHA384,
-					ECDSA_SECP521R1_SHA512,
-					ED25519,
-					ED448,
-					RSA_PSS_PSS_SHA256,
-					RSA_PSS_PSS_SHA384,
-					RSA_PSS_PSS_SHA512,
-					RSA_PSS_RSAE_SHA256,
-					RSA_PSS_RSAE_SHA384,
-					RSA_PSS_RSAE_SHA512,
-					RSA_PKCS1_SHA256,
-					RSA_PKCS1_SHA384,
-					RSA_PKCS1_SHA512,
+				SignatureAlgorithms: []common.SignatureAlgorithms{
+					common.ECDSA_SECP256R1_SHA256,
+					common.ECDSA_SECP384R1_SHA384,
+					common.ECDSA_SECP521R1_SHA512,
+					common.ED25519,
+					common.ED448,
+					common.RSA_PSS_PSS_SHA256,
+					common.RSA_PSS_PSS_SHA384,
+					common.RSA_PSS_PSS_SHA512,
+					common.RSA_PSS_RSAE_SHA256,
+					common.RSA_PSS_RSAE_SHA384,
+					common.RSA_PSS_RSAE_SHA512,
+					common.RSA_PKCS1_SHA256,
+					common.RSA_PKCS1_SHA384,
+					common.RSA_PKCS1_SHA512,
 				},
 			},
 			bytes: []byte{
@@ -243,13 +192,12 @@ func TestExtKeyShare(t *testing.T) {
 	}{
 		{
 			literal: ExtKeyShare{
-				Length:      36,
-				Group:       X25519,
+				Group:       common.X25519,
 				KeyLength:   32,
 				KeyExchange: pubKey,
 			},
 			bytes: []byte{
-				0, 36, 0, 29, 0, 32, 53, 128, 114, 214, 54, 88, 128, 209, 174, 234,
+				0, 29, 0, 32, 53, 128, 114, 214, 54, 88, 128, 209, 174, 234,
 				50, 154, 223, 145, 33, 56, 56, 81, 237, 33, 162, 142, 59, 117, 233,
 				101, 208, 210, 205, 22, 98, 84,
 			},
@@ -274,40 +222,6 @@ func TestExtKeyShare(t *testing.T) {
 	})
 }
 
-func TestExtPSKKeyExchangeModes(t *testing.T) {
-	testSuites := []struct {
-		literal ExtPSKKeyExchangeModes
-		bytes   []byte
-	}{
-		{
-			literal: ExtPSKKeyExchangeModes{
-				Length: 1,
-				PSKKeyExchangeModes: []PSKKeyExchangeMode{
-					PSK_DHE_KE,
-				},
-			},
-			bytes: []byte{0x01, 0x01},
-		},
-	}
-
-	t.Run("Serialize", func(t *testing.T) {
-		for _, test := range testSuites {
-			serialized := test.literal.Serialize()
-			assert.Equal(t, test.bytes, serialized)
-		}
-	})
-
-	t.Run("Deserialize", func(t *testing.T) {
-		for _, test := range testSuites {
-			extPSKKeyExchangeModes := ExtPSKKeyExchangeModes{}
-			read := extPSKKeyExchangeModes.Deserialize(test.bytes)
-
-			assert.Equal(t, len(test.bytes), read)
-			assert.Equal(t, test.literal, extPSKKeyExchangeModes)
-		}
-	})
-}
-
 func TestExtSupportedVersions(t *testing.T) {
 	testSuites := []struct {
 		literal ExtSupportedVersions
@@ -315,12 +229,9 @@ func TestExtSupportedVersions(t *testing.T) {
 	}{
 		{
 			literal: ExtSupportedVersions{
-				Length: 2,
-				SupportedVersions: []ProtocolVersion{
-					TLS_1_3,
-				},
+				SupportedVersion: common.TLS_1_3,
 			},
-			bytes: []byte{0x02, 0x03, 0x04},
+			bytes: []byte{0x03, 0x04},
 		},
 	}
 

@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"trieutrng.com/toy-tls/common"
+	"trieutrng.com/toy-tls/protocol/client"
 )
 
 func TestRecord(t *testing.T) {
@@ -14,13 +16,13 @@ func TestRecord(t *testing.T) {
 		{
 			literal: Record{
 				Type:            Record_Handshake,
-				ProtocolVersion: TLS_1_0,
+				ProtocolVersion: common.TLS_1_0,
 				Length:          125,
 				Fragment: &HandShake{
-					Type:   HandShake_ClientHello,
+					Type:   common.HandShake_ClientHello,
 					Length: 121,
 					Body: &ClientHello{
-						ProtocolVersion: TLS_1_2,
+						ProtocolVersion: common.TLS_1_2,
 						Random: []byte{
 							0, 1, 2, 3, 4, 5, 6, 7,
 							8, 9, 10, 11, 12, 13, 14, 15,
@@ -37,41 +39,41 @@ func TestRecord(t *testing.T) {
 						},
 						CipherSuites: CipherSuites{
 							Length: 8,
-							CipherSuites: []CipherSuite{
-								TLS_AES_256_GCM_SHA384,
-								TLS_CHACHA20_POLY1305_SHA256,
-								TLS_AES_128_GCM_SHA256,
-								TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
+							CipherSuites: []common.CipherSuite{
+								common.TLS_AES_256_GCM_SHA384,
+								common.TLS_CHACHA20_POLY1305_SHA256,
+								common.TLS_AES_128_GCM_SHA256,
+								common.TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
 							},
 						},
 						LegacyCompressionMethods: CompressionMethod{
 							Length: 1,
 							Data:   []byte{0}, // 0 == null
 						},
-						Extensions: Extensions{
+						Extensions: client.Extensions{
 							Length: 40,
-							Data: []Extension{
+							Data: []client.Extension{
 								{
-									Type:   Ext_ServerName,
+									Type:   common.Ext_ServerName,
 									Length: 24,
-									Data: &ExtServerNameList{
+									Data: &client.ExtServerNameList{
 										Length: 22,
-										ServerName: ServerName{
-											NameType: Host_Name,
+										ServerName: client.ServerName{
+											NameType: common.Host_Name,
 											Length:   19,
 											Data:     []byte("example.ulfheim.net"),
 										},
 									},
 								},
 								{
-									Type:   Ext_SignatureAlgorithms,
+									Type:   common.Ext_SignatureAlgorithms,
 									Length: 8,
-									Data: &ExtSignatureAlgorithms{
+									Data: &client.ExtSignatureAlgorithms{
 										Length: 6,
-										SignatureAlgorithms: []SignatureAlgorithms{
-											ED25519,
-											ED448,
-											RSA_PSS_PSS_SHA256,
+										SignatureAlgorithms: []common.SignatureAlgorithms{
+											common.ED25519,
+											common.ED448,
+											common.RSA_PSS_PSS_SHA256,
 										},
 									},
 								},

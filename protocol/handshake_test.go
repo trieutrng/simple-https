@@ -4,6 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"trieutrng.com/toy-tls/common"
+	"trieutrng.com/toy-tls/protocol/client"
+	"trieutrng.com/toy-tls/protocol/server"
 )
 
 func TestHandShake(t *testing.T) {
@@ -13,10 +16,10 @@ func TestHandShake(t *testing.T) {
 	}{
 		{
 			literal: HandShake{
-				Type:   HandShake_ClientHello,
+				Type:   common.HandShake_ClientHello,
 				Length: 121,
 				Body: &ClientHello{
-					ProtocolVersion: TLS_1_2,
+					ProtocolVersion: common.TLS_1_2,
 					Random: []byte{
 						0, 1, 2, 3, 4, 5, 6, 7,
 						8, 9, 10, 11, 12, 13, 14, 15,
@@ -33,41 +36,41 @@ func TestHandShake(t *testing.T) {
 					},
 					CipherSuites: CipherSuites{
 						Length: 8,
-						CipherSuites: []CipherSuite{
-							TLS_AES_256_GCM_SHA384,
-							TLS_CHACHA20_POLY1305_SHA256,
-							TLS_AES_128_GCM_SHA256,
-							TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
+						CipherSuites: []common.CipherSuite{
+							common.TLS_AES_256_GCM_SHA384,
+							common.TLS_CHACHA20_POLY1305_SHA256,
+							common.TLS_AES_128_GCM_SHA256,
+							common.TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
 						},
 					},
 					LegacyCompressionMethods: CompressionMethod{
 						Length: 1,
 						Data:   []byte{0}, // 0 == null
 					},
-					Extensions: Extensions{
+					Extensions: client.Extensions{
 						Length: 40,
-						Data: []Extension{
+						Data: []client.Extension{
 							{
-								Type:   Ext_ServerName,
+								Type:   common.Ext_ServerName,
 								Length: 24,
-								Data: &ExtServerNameList{
+								Data: &client.ExtServerNameList{
 									Length: 22,
-									ServerName: ServerName{
-										NameType: Host_Name,
+									ServerName: client.ServerName{
+										NameType: common.Host_Name,
 										Length:   19,
 										Data:     []byte("example.ulfheim.net"),
 									},
 								},
 							},
 							{
-								Type:   Ext_SignatureAlgorithms,
+								Type:   common.Ext_SignatureAlgorithms,
 								Length: 8,
-								Data: &ExtSignatureAlgorithms{
+								Data: &client.ExtSignatureAlgorithms{
 									Length: 6,
-									SignatureAlgorithms: []SignatureAlgorithms{
-										ED25519,
-										ED448,
-										RSA_PSS_PSS_SHA256,
+									SignatureAlgorithms: []common.SignatureAlgorithms{
+										common.ED25519,
+										common.ED448,
+										common.RSA_PSS_PSS_SHA256,
 									},
 								},
 							},
@@ -131,7 +134,7 @@ func TestClientHello(t *testing.T) {
 	}{
 		{
 			literal: ClientHello{
-				ProtocolVersion: TLS_1_2,
+				ProtocolVersion: common.TLS_1_2,
 				Random: []byte{
 					0, 1, 2, 3, 4, 5, 6, 7,
 					8, 9, 10, 11, 12, 13, 14, 15,
@@ -148,41 +151,41 @@ func TestClientHello(t *testing.T) {
 				},
 				CipherSuites: CipherSuites{
 					Length: 8,
-					CipherSuites: []CipherSuite{
-						TLS_AES_256_GCM_SHA384,
-						TLS_CHACHA20_POLY1305_SHA256,
-						TLS_AES_128_GCM_SHA256,
-						TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
+					CipherSuites: []common.CipherSuite{
+						common.TLS_AES_256_GCM_SHA384,
+						common.TLS_CHACHA20_POLY1305_SHA256,
+						common.TLS_AES_128_GCM_SHA256,
+						common.TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
 					},
 				},
 				LegacyCompressionMethods: CompressionMethod{
 					Length: 1,
 					Data:   []byte{0}, // 0 == null
 				},
-				Extensions: Extensions{
+				Extensions: client.Extensions{
 					Length: 40,
-					Data: []Extension{
+					Data: []client.Extension{
 						{
-							Type:   Ext_ServerName,
+							Type:   common.Ext_ServerName,
 							Length: 24,
-							Data: &ExtServerNameList{
+							Data: &client.ExtServerNameList{
 								Length: 22,
-								ServerName: ServerName{
-									NameType: Host_Name,
+								ServerName: client.ServerName{
+									NameType: common.Host_Name,
 									Length:   19,
 									Data:     []byte("example.ulfheim.net"),
 								},
 							},
 						},
 						{
-							Type:   Ext_SignatureAlgorithms,
+							Type:   common.Ext_SignatureAlgorithms,
 							Length: 8,
-							Data: &ExtSignatureAlgorithms{
+							Data: &client.ExtSignatureAlgorithms{
 								Length: 6,
-								SignatureAlgorithms: []SignatureAlgorithms{
-									ED25519,
-									ED448,
-									RSA_PSS_PSS_SHA256,
+								SignatureAlgorithms: []common.SignatureAlgorithms{
+									common.ED25519,
+									common.ED448,
+									common.RSA_PSS_PSS_SHA256,
 								},
 							},
 						},
@@ -240,7 +243,7 @@ func TestServerHello(t *testing.T) {
 	}{
 		{
 			literal: ServerHello{
-				ProtocolVersion: TLS_1_2,
+				ProtocolVersion: common.TLS_1_2,
 				Random: []byte{
 					0, 1, 2, 3, 4, 5, 6, 7,
 					8, 9, 10, 11, 12, 13, 14, 15,
@@ -255,32 +258,27 @@ func TestServerHello(t *testing.T) {
 						247, 248, 249, 250, 251, 252, 253, 254, 255,
 					},
 				},
-				CipherSuite:             TLS_AES_128_GCM_SHA256,
+				CipherSuite:             common.TLS_AES_128_GCM_SHA256,
 				LegacyCompressionMethod: 0,
-				Extensions: Extensions{
-					Length: 40,
-					Data: []Extension{
+				Extensions: server.Extensions{
+					Length: 18,
+					Data: []server.Extension{
 						{
-							Type:   Ext_ServerName,
-							Length: 24,
-							Data: &ExtServerNameList{
-								Length: 22,
-								ServerName: ServerName{
-									NameType: Host_Name,
-									Length:   19,
-									Data:     []byte("example.ulfheim.net"),
-								},
+							Type:   common.Ext_SupportedVersions,
+							Length: 2,
+							Data: &server.ExtSupportedVersions{
+								SupportedVersion: common.TLS_1_3,
 							},
 						},
 						{
-							Type:   Ext_SignatureAlgorithms,
+							Type:   common.Ext_SignatureAlgorithms,
 							Length: 8,
-							Data: &ExtSignatureAlgorithms{
+							Data: &server.ExtSignatureAlgorithms{
 								Length: 6,
-								SignatureAlgorithms: []SignatureAlgorithms{
-									ED25519,
-									ED448,
-									RSA_PSS_PSS_SHA256,
+								SignatureAlgorithms: []common.SignatureAlgorithms{
+									common.ED25519,
+									common.ED448,
+									common.RSA_PSS_PSS_SHA256,
 								},
 							},
 						},
@@ -305,9 +303,8 @@ func TestServerHello(t *testing.T) {
 				// legacy compression method
 				0,
 				// extensions
-				0, 40,
-				0, 0, 0, 24, 0, 22, 0, 0, 19, 101, 120, 97, 109, 112, 108, 101,
-				46, 117, 108, 102, 104, 101, 105, 109, 46, 110, 101, 116,
+				0, 18,
+				0, 43, 0, 2, 3, 4,
 				0, 13, 0, 8, 0, 6, 8, 7, 8, 8, 8, 9,
 			},
 		},
@@ -379,11 +376,11 @@ func TestCipherSuites(t *testing.T) {
 		{
 			literal: CipherSuites{
 				Length: 8,
-				CipherSuites: []CipherSuite{
-					TLS_AES_256_GCM_SHA384,
-					TLS_CHACHA20_POLY1305_SHA256,
-					TLS_AES_128_GCM_SHA256,
-					TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
+				CipherSuites: []common.CipherSuite{
+					common.TLS_AES_256_GCM_SHA384,
+					common.TLS_CHACHA20_POLY1305_SHA256,
+					common.TLS_AES_128_GCM_SHA256,
+					common.TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
 				},
 			},
 			bytes: []byte{0, 8, 19, 2, 19, 3, 19, 1, 0, 255},
