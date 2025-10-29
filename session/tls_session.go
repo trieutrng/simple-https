@@ -13,14 +13,20 @@ import (
 	"trieutrng.com/toy-tls/crypto"
 	"trieutrng.com/toy-tls/protocol"
 	"trieutrng.com/toy-tls/protocol/client"
+	"trieutrng.com/toy-tls/protocol/server"
 )
 
 type TLSSession struct {
-	conn            net.Conn
-	sessionKey      []byte
-	domain          string
-	keyPair         *crypto.KeyPair
+	conn    net.Conn
+	domain  string
+	keys    *keys
+	records []*protocol.Record
+}
+
+type keys struct {
+	clientKeyPair   *crypto.KeyPair
 	serverPublicKey []byte
+	sessionKey      []byte
 }
 
 func NewSession(domain string) (*TLSSession, error) {
@@ -32,6 +38,7 @@ func NewSession(domain string) (*TLSSession, error) {
 	tlsSession := &TLSSession{
 		conn:   conn,
 		domain: domain,
+		keys:   &keys{},
 	}
 
 	err = tlsSession.handShake()
@@ -63,6 +70,10 @@ func (s *TLSSession) handShake() error {
 		log.Errorf("Failed to receive server hello: %v", err)
 		return err
 	}
+	if err := s.calculateSessionKeys(); err != nil {
+		log.Errorf("Failed to calculate session keys: %v", err)
+		return err
+	}
 	return nil
 }
 
@@ -71,7 +82,7 @@ func (s *TLSSession) generateKeyExchange() error {
 	if err != nil {
 		return err
 	}
-	s.keyPair = keyPair
+	s.keys.clientKeyPair = keyPair
 	return nil
 }
 
@@ -102,10 +113,23 @@ func (s *TLSSession) serverHello() error {
 	fmt.Printf("Server chosen cipher suite: %v\n", serverHello.CipherSuite)
 	fmt.Printf("Server returned %d extensions\n", len(serverHello.Extensions.Data))
 	fmt.Println("Extensions:")
-	for _, extension := range serverHello.Extensions.Data {
-		fmt.Printf("\t%v\n", extension.Data)
+
+	var serverPublicKey []byte
+	for _, ext := range serverHello.Extensions.Data {
+		if extKeyShare, ok := (ext.Data).(*server.ExtKeyShare); ok {
+			serverPublicKey = extKeyShare.KeyExchange
+			break
+		}
 	}
+	if serverPublicKey == nil {
+		return errors.New("server turn no public key")
+	}
+	s.keys.serverPublicKey = serverPublicKey
 	return nil
+}
+
+func (s *TLSSession) calculateSessionKeys() error {
+	return nil // TODO
 }
 
 func (s *TLSSession) getRecord() (*protocol.Record, error) {
@@ -169,7 +193,7 @@ func (s *TLSSession) getClientHelloRecord() (*protocol.Record, error) {
 			common.Ext_KeyShare,
 			client.NewExtKeyShare(
 				common.X25519,
-				s.keyPair.Public,
+				s.keys.clientKeyPair.Public,
 			),
 		),
 		*client.NewExtension(
