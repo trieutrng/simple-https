@@ -27,6 +27,25 @@ type keys struct {
 	clientKeyPair   *crypto.KeyPair
 	serverPublicKey []byte
 	sessionKey      []byte
+	handShakeKeys   handShakeKeys
+	applicationKeys applicationKeys
+}
+
+type handShakeKeys struct {
+	handShakeSecret    []byte
+	clientSecret       []byte
+	serverSecret       []byte
+	clientHandShakeKey []byte
+	serverHandShakeKey []byte
+	clientHandShakeIV  []byte // initialization vector
+	serverHandShakeIV  []byte // initialization vector
+}
+
+type applicationKeys struct {
+	clientApplicationKey []byte
+	serverApplicationKey []byte
+	clientApplicationIV  []byte // initialization vector
+	serverApplicationIV  []byte // initialization vector
 }
 
 func NewSession(domain string) (*TLSSession, error) {
@@ -70,7 +89,7 @@ func (s *TLSSession) handShake() error {
 		log.Errorf("Failed to receive server hello: %v", err)
 		return err
 	}
-	if err := s.calculateSessionKeys(); err != nil {
+	if err := s.calculateHandshakeKeys(); err != nil {
 		log.Errorf("Failed to calculate session keys: %v", err)
 		return err
 	}
@@ -128,7 +147,7 @@ func (s *TLSSession) serverHello() error {
 	return nil
 }
 
-func (s *TLSSession) calculateSessionKeys() error {
+func (s *TLSSession) calculateHandshakeKeys() error {
 	return nil // TODO
 }
 
