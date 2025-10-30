@@ -14,7 +14,9 @@ func init() {
 }
 
 func main() {
-	domain := "trieutrng.github.io"
+	//domain := "trieutrng.github.io"
+	//domain := "jvns.ca"
+	domain := "www.google.com"
 	var err error
 
 	session, err := tlsSession.NewSession(domain)

@@ -2,8 +2,8 @@ package session
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -17,18 +17,18 @@ import (
 )
 
 type TLSSession struct {
-	conn    net.Conn
-	domain  string
-	keys    *keys
-	records []*protocol.Record
+	conn           net.Conn
+	domain         string
+	keys           *keys
+	keyCalcRecords []*protocol.Record
 }
 
 type keys struct {
 	clientKeyPair   *crypto.KeyPair
 	serverPublicKey []byte
 	sessionKey      []byte
-	handShakeKeys   handShakeKeys
-	applicationKeys applicationKeys
+	handShakeKeys   *handShakeKeys
+	applicationKeys *applicationKeys
 }
 
 type handShakeKeys struct {
@@ -90,7 +90,11 @@ func (s *TLSSession) handShake() error {
 		return err
 	}
 	if err := s.calculateHandshakeKeys(); err != nil {
-		log.Errorf("Failed to calculate session keys: %v", err)
+		log.Errorf("Failed to calculate handshake keys: %v", err)
+		return err
+	}
+	if err := s.serverChangeCipherSpec(); err != nil {
+		log.Errorf("Failed on receiving server change cipher spec: %v", err)
 		return err
 	}
 	return nil
@@ -116,7 +120,9 @@ func (s *TLSSession) clientHello() error {
 		return err
 	}
 
+	s.keyCalcRecords = append(s.keyCalcRecords, record)
 	log.Debugf("Exchanged %v bytes of client hello record", n)
+
 	return nil
 }
 
@@ -129,9 +135,9 @@ func (s *TLSSession) serverHello() error {
 	serverHandshake := (record.Fragment).(*protocol.HandShake)
 	serverHello := (serverHandshake.Body).(*protocol.ServerHello)
 
-	fmt.Printf("Server chosen cipher suite: %v\n", serverHello.CipherSuite)
-	fmt.Printf("Server returned %d extensions\n", len(serverHello.Extensions.Data))
-	fmt.Println("Extensions:")
+	s.keyCalcRecords = append(s.keyCalcRecords, record)
+
+	log.Debugf("Server chose cipher suite: %v\n", serverHello.CipherSuite)
 
 	var serverPublicKey []byte
 	for _, ext := range serverHello.Extensions.Data {
@@ -148,7 +154,65 @@ func (s *TLSSession) serverHello() error {
 }
 
 func (s *TLSSession) calculateHandshakeKeys() error {
-	return nil // TODO
+	// calculate shared secret
+	sharedSecret, err := crypto.GetSharedSecretX25519(s.keys.clientKeyPair.Private, s.keys.serverPublicKey)
+	if err != nil {
+		return err
+	}
+
+	// calculate hello hash
+	concatenatedHello := make([]byte, 0)
+	for _, record := range s.keyCalcRecords {
+		concatenatedHello = append(concatenatedHello, record.Fragment.Serialize()...)
+	}
+
+	// calculate handshake keys
+	// use sha256 hash func here since the server and client has been accepted on cipher suite with SHA256
+	hashFunc := sha256.New
+	hashLength := 32
+
+	hashMessage := func(message []byte) []byte {
+		hashedMessage := sha256.Sum256(message)
+		return hashedMessage[:]
+	}
+
+	var empty []byte
+	zeroSalt := make([]byte, 32)
+	zeroSecret := make([]byte, 32)
+
+	earlySecret := crypto.HKDFExtract(hashFunc, zeroSecret, zeroSalt)
+	derivedSecret := crypto.HKDFExpandLabel(hashFunc, earlySecret, "derived", hashMessage(empty), hashLength)
+	handShakeSecret := crypto.HKDFExtract(hashFunc, sharedSecret, derivedSecret)
+
+	clientSecret := crypto.HKDFExpandLabel(hashFunc, handShakeSecret, "c hs traffic", hashMessage(concatenatedHello), hashLength)
+	clientHandShakeKey := crypto.HKDFExpandLabel(hashFunc, clientSecret, "key", empty, 16)
+	clientHandShakeIV := crypto.HKDFExpandLabel(hashFunc, clientSecret, "iv", empty, 12)
+
+	serverSecret := crypto.HKDFExpandLabel(hashFunc, handShakeSecret, "s hs traffic", hashMessage(concatenatedHello), hashLength)
+	serverHandShakeKey := crypto.HKDFExpandLabel(hashFunc, serverSecret, "key", empty, 16)
+	serverHandShakeIV := crypto.HKDFExpandLabel(hashFunc, serverSecret, "iv", empty, 12)
+
+	s.keys.handShakeKeys = &handShakeKeys{
+		handShakeSecret:    handShakeSecret,
+		clientSecret:       clientSecret,
+		serverSecret:       serverSecret,
+		clientHandShakeKey: clientHandShakeKey,
+		serverHandShakeKey: serverHandShakeKey,
+		clientHandShakeIV:  clientHandShakeIV,
+		serverHandShakeIV:  serverHandShakeIV,
+	}
+
+	return nil
+}
+
+func (s *TLSSession) serverChangeCipherSpec() error {
+	_, err := s.getRecord()
+	if err != nil {
+		return err
+	}
+	// skip change cipher spec records
+	log.Debugf("Server change cipher spec")
+	return nil
 }
 
 func (s *TLSSession) getRecord() (*protocol.Record, error) {

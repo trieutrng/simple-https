@@ -61,6 +61,8 @@ func newFragment(recordContentType RecordContentType) common.ExchangeObject {
 	switch recordContentType {
 	case Record_Handshake:
 		return &HandShake{}
+	case Record_ChangeCipherSpec:
+		return &ChangeCipherSpec{}
 	case Record_Alert:
 		return &Alert{}
 	}
