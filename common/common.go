@@ -32,24 +32,24 @@ const (
 	X25519 NamedCurve = 0x001d
 )
 
-type SignatureAlgorithms uint16
+type SignatureAlgorithm uint16
 
 const (
-	ECDSA_SECP256R1_SHA256 SignatureAlgorithms = 0x0403
-	ECDSA_SECP384R1_SHA384 SignatureAlgorithms = 0x0503
-	ECDSA_SECP521R1_SHA512 SignatureAlgorithms = 0x0603
-	ED25519                SignatureAlgorithms = 0x0807
-	ED448                  SignatureAlgorithms = 0x0808
-	RSA_PSS_PSS_SHA256     SignatureAlgorithms = 0x0809
-	RSA_PSS_PSS_SHA384     SignatureAlgorithms = 0x080a
-	RSA_PSS_PSS_SHA512     SignatureAlgorithms = 0x080b
-	RSA_PSS_RSAE_SHA256    SignatureAlgorithms = 0x0804
-	RSA_PSS_RSAE_SHA384    SignatureAlgorithms = 0x0805
-	RSA_PSS_RSAE_SHA512    SignatureAlgorithms = 0x0806
-	RSA_PKCS1_SHA256       SignatureAlgorithms = 0x0401
-	RSA_PKCS1_SHA384       SignatureAlgorithms = 0x0501
-	RSA_PKCS1_SHA512       SignatureAlgorithms = 0x0601
-	RSA_PKCS1_SHA1         SignatureAlgorithms = 0x0201
+	ECDSA_SECP256R1_SHA256 SignatureAlgorithm = 0x0403
+	ECDSA_SECP384R1_SHA384 SignatureAlgorithm = 0x0503
+	ECDSA_SECP521R1_SHA512 SignatureAlgorithm = 0x0603
+	ED25519                SignatureAlgorithm = 0x0807
+	ED448                  SignatureAlgorithm = 0x0808
+	RSA_PSS_PSS_SHA256     SignatureAlgorithm = 0x0809
+	RSA_PSS_PSS_SHA384     SignatureAlgorithm = 0x080a
+	RSA_PSS_PSS_SHA512     SignatureAlgorithm = 0x080b
+	RSA_PSS_RSAE_SHA256    SignatureAlgorithm = 0x0804
+	RSA_PSS_RSAE_SHA384    SignatureAlgorithm = 0x0805
+	RSA_PSS_RSAE_SHA512    SignatureAlgorithm = 0x0806
+	RSA_PKCS1_SHA256       SignatureAlgorithm = 0x0401
+	RSA_PKCS1_SHA384       SignatureAlgorithm = 0x0501
+	RSA_PKCS1_SHA512       SignatureAlgorithm = 0x0601
+	RSA_PKCS1_SHA1         SignatureAlgorithm = 0x0201
 )
 
 type PSKKeyExchangeMode uint8

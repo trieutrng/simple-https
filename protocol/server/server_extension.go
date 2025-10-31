@@ -141,10 +141,10 @@ func (e *ExtSupportedGroups) String() string {
 
 type ExtSignatureAlgorithms struct {
 	Length              uint16
-	SignatureAlgorithms []common.SignatureAlgorithms
+	SignatureAlgorithms []common.SignatureAlgorithm
 }
 
-func NewExtSignatureAlgorithms(signatureAlgorithms []common.SignatureAlgorithms) *ExtSignatureAlgorithms {
+func NewExtSignatureAlgorithms(signatureAlgorithms []common.SignatureAlgorithm) *ExtSignatureAlgorithms {
 	return &ExtSignatureAlgorithms{
 		SignatureAlgorithms: signatureAlgorithms,
 	}
@@ -167,10 +167,10 @@ func (e *ExtSignatureAlgorithms) Serialize() []byte {
 func (e *ExtSignatureAlgorithms) Deserialize(data []byte) int {
 	buf := bytes.NewBuffer(data)
 	_ = binary.Read(buf, binary.BigEndian, &e.Length)
-	e.SignatureAlgorithms = make([]common.SignatureAlgorithms, 0)
+	e.SignatureAlgorithms = make([]common.SignatureAlgorithm, 0)
 	read := 0
 	for read < int(e.Length) {
-		var algorithm common.SignatureAlgorithms
+		var algorithm common.SignatureAlgorithm
 		_ = binary.Read(buf, binary.BigEndian, &algorithm)
 		e.SignatureAlgorithms = append(e.SignatureAlgorithms, algorithm)
 		read += 2

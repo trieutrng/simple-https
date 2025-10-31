@@ -29,7 +29,7 @@ func TestExtensions(t *testing.T) {
 						Length: 8,
 						Data: &ExtSignatureAlgorithms{
 							Length: 6,
-							SignatureAlgorithms: []common.SignatureAlgorithms{
+							SignatureAlgorithms: []common.SignatureAlgorithm{
 								common.ED25519,
 								common.ED448,
 								common.RSA_PSS_PSS_SHA256,
@@ -140,7 +140,7 @@ func TestExtSignatureAlgorithms(t *testing.T) {
 		{
 			literal: ExtSignatureAlgorithms{
 				Length: 28,
-				SignatureAlgorithms: []common.SignatureAlgorithms{
+				SignatureAlgorithms: []common.SignatureAlgorithm{
 					common.ECDSA_SECP256R1_SHA256,
 					common.ECDSA_SECP384R1_SHA384,
 					common.ECDSA_SECP521R1_SHA512,

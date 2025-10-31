@@ -106,6 +106,10 @@ func (s *TLSSession) handShake() error {
 		log.Errorf("Failed on step getting server certificate: %v", err)
 		return err
 	}
+	if err := s.getServerCertificateVerify(); err != nil {
+		log.Errorf("Failed on step getting server certificate verify: %v", err)
+		return err
+	}
 	return nil
 }
 
@@ -253,6 +257,26 @@ func (s *TLSSession) getServerCertificate() error {
 	return nil
 }
 
+func (s *TLSSession) getServerCertificateVerify() error {
+	fragment, err := s.getDecryptedHandShakeMessage()
+	if err != nil {
+		return errors.New("can't decrypt server certificate - Caused by: " + err.Error())
+	}
+	handShake, ok := (fragment).(*protocol.HandShake)
+	if !ok {
+		return errors.New("failed on casting handshake message")
+	}
+	certificateVerify, ok := (handShake.Body).(*protocol.CertificateVerify)
+	if !ok {
+		return errors.New("failed on casting certificate verify message")
+	}
+	log.Debugf("Server certificate verify signature algorithm: %v, len: %d", certificateVerify.SignatureAlgorithm, certificateVerify.Length)
+
+	// TODO: verify cert with root CA
+
+	return nil
+}
+
 func (s *TLSSession) getClientHelloRecord() (*protocol.Record, error) {
 	extensions := client.NewExtensions([]client.Extension{
 		*client.NewExtension(
@@ -269,7 +293,7 @@ func (s *TLSSession) getClientHelloRecord() (*protocol.Record, error) {
 		),
 		*client.NewExtension(
 			common.Ext_SignatureAlgorithms,
-			client.NewExtSignatureAlgorithms([]common.SignatureAlgorithms{
+			client.NewExtSignatureAlgorithms([]common.SignatureAlgorithm{
 				common.ECDSA_SECP256R1_SHA256,
 				common.RSA_PSS_RSAE_SHA256,
 				common.RSA_PKCS1_SHA256,

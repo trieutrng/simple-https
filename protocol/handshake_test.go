@@ -67,7 +67,7 @@ func TestHandShake(t *testing.T) {
 								Length: 8,
 								Data: &client.ExtSignatureAlgorithms{
 									Length: 6,
-									SignatureAlgorithms: []common.SignatureAlgorithms{
+									SignatureAlgorithms: []common.SignatureAlgorithm{
 										common.ED25519,
 										common.ED448,
 										common.RSA_PSS_PSS_SHA256,
@@ -182,7 +182,7 @@ func TestClientHello(t *testing.T) {
 							Length: 8,
 							Data: &client.ExtSignatureAlgorithms{
 								Length: 6,
-								SignatureAlgorithms: []common.SignatureAlgorithms{
+								SignatureAlgorithms: []common.SignatureAlgorithm{
 									common.ED25519,
 									common.ED448,
 									common.RSA_PSS_PSS_SHA256,
@@ -275,7 +275,7 @@ func TestServerHello(t *testing.T) {
 							Length: 8,
 							Data: &server.ExtSignatureAlgorithms{
 								Length: 6,
-								SignatureAlgorithms: []common.SignatureAlgorithms{
+								SignatureAlgorithms: []common.SignatureAlgorithm{
 									common.ED25519,
 									common.ED448,
 									common.RSA_PSS_PSS_SHA256,

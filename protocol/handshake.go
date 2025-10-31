@@ -52,6 +52,8 @@ func newHandshakeBody(handshakeType common.HandshakeType) common.ExchangeObject 
 		return &server.Extensions{} // server only
 	case common.HandShake_Certificate:
 		return &Certificate{}
+	case common.HandShake_CertificateVerify:
+		return &CertificateVerify{}
 	}
 	return nil
 }
@@ -266,7 +268,7 @@ func (c *Certificate) Serialize() []byte {
 
 	certificateEntriesBuf := new(bytes.Buffer)
 	for _, entry := range c.CertificateEntries {
-		_ = binary.Write(certificateEntriesBuf, binary.BigEndian, entry.Serialize())
+		certificateEntriesBuf.Write(entry.Serialize())
 	}
 	certificateEntries := certificateEntriesBuf.Bytes()
 
@@ -342,4 +344,27 @@ func (c *CertificateEntry) Deserialize(data []byte) int {
 	read += c.Extensions.Deserialize(data[read:])
 
 	return read
+}
+
+type CertificateVerify struct {
+	SignatureAlgorithm common.SignatureAlgorithm
+	Length             uint16
+	Signature          []byte
+}
+
+func (c *CertificateVerify) Serialize() []byte {
+	buf := new(bytes.Buffer)
+	_ = binary.Write(buf, binary.BigEndian, c.SignatureAlgorithm)
+	_ = binary.Write(buf, binary.BigEndian, uint16(len(c.Signature)))
+	buf.Write(c.Signature)
+	return buf.Bytes()
+}
+
+func (c *CertificateVerify) Deserialize(data []byte) int {
+	buf := bytes.NewBuffer(data)
+	_ = binary.Read(buf, binary.BigEndian, &c.SignatureAlgorithm)
+	_ = binary.Read(buf, binary.BigEndian, &c.Length)
+	c.Signature = make([]byte, c.Length)
+	copy(c.Signature, buf.Next(int(c.Length)))
+	return len(data) - buf.Len()
 }
