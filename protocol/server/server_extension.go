@@ -90,6 +90,8 @@ func newExtension(extType common.ExtensionType) common.ExchangeObject {
 		return &ExtKeyShare{}
 	case common.Ext_SupportedVersions:
 		return &ExtSupportedVersions{}
+	case common.Ext_ServerName:
+		return &ExtServerNameList{}
 	}
 	return nil
 }
@@ -238,4 +240,69 @@ func (e *ExtSupportedVersions) Deserialize(data []byte) int {
 
 func (e *ExtSupportedVersions) String() string {
 	return fmt.Sprintf("Supported Version: %v", e.SupportedVersion)
+}
+
+type ExtServerNameList struct {
+	Length     uint16
+	ServerName ServerName
+}
+
+func NewExtServerNameList(serverName *ServerName) *ExtServerNameList {
+	return &ExtServerNameList{
+		ServerName: *serverName,
+	}
+}
+
+func (e *ExtServerNameList) Serialize() []byte {
+	buf := new(bytes.Buffer)
+	serverNameBuf := e.ServerName.Serialize()
+	_ = binary.Write(buf, binary.BigEndian, uint16(len(serverNameBuf)))
+	buf.Write(serverNameBuf)
+	return buf.Bytes()
+}
+
+func (e *ExtServerNameList) Deserialize(data []byte) int {
+	buf := bytes.NewBuffer(data)
+	_ = binary.Read(buf, binary.BigEndian, &e.Length)
+	e.ServerName = ServerName{}
+	e.ServerName.Deserialize(buf.Next(int(e.Length)))
+	return len(data) - buf.Len()
+}
+
+func (e *ExtServerNameList) String() string {
+	return fmt.Sprintf("Server name list: \n\t%s", e.ServerName.String())
+}
+
+type ServerName struct {
+	NameType common.ServerNameType
+	Length   uint16
+	Data     []byte
+}
+
+func NewServerName(nameType common.ServerNameType, name []byte) *ServerName {
+	return &ServerName{
+		NameType: nameType,
+		Data:     name,
+	}
+}
+
+func (s *ServerName) Serialize() []byte {
+	buf := new(bytes.Buffer)
+	_ = binary.Write(buf, binary.BigEndian, s.NameType)
+	_ = binary.Write(buf, binary.BigEndian, uint16(len(s.Data)))
+	buf.Write(s.Data)
+	return buf.Bytes()
+}
+
+func (s *ServerName) Deserialize(data []byte) int {
+	buf := bytes.NewBuffer(data)
+	_ = binary.Read(buf, binary.BigEndian, &s.NameType)
+	_ = binary.Read(buf, binary.BigEndian, &s.Length)
+	s.Data = make([]byte, s.Length)
+	copy(s.Data, buf.Next(int(s.Length)))
+	return len(data) - buf.Len()
+}
+
+func (s *ServerName) String() string {
+	return fmt.Sprintf("Server name: %s", string(s.Data))
 }

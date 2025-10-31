@@ -2,6 +2,8 @@ package crypto
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
@@ -95,4 +97,35 @@ func HKDFExpandLabel(hashFunc func() hash.Hash, secret []byte, label string, con
 		panic(err)
 	}
 	return okm
+}
+
+func AESGCMDecrypt(key, iv, wrapper []byte) []byte {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err.Error())
+	}
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		panic(err.Error())
+	}
+	additional := wrapper[:5]
+	ciphertext := wrapper[5:]
+	plaintext, err := aesgcm.Open(nil, iv, ciphertext, additional)
+	if err != nil {
+		panic(err.Error())
+	}
+	return plaintext
+}
+
+func encrypt(key, iv, plaintext, additional []byte) []byte {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err.Error())
+	}
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		panic(err.Error())
+	}
+	ciphertext := aesgcm.Seal(nil, iv, plaintext, additional)
+	return append(additional, ciphertext...)
 }
