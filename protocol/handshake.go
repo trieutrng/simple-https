@@ -54,6 +54,8 @@ func newHandshakeBody(handshakeType common.HandshakeType) common.ExchangeObject 
 		return &Certificate{}
 	case common.HandShake_CertificateVerify:
 		return &CertificateVerify{}
+	case common.HandShake_Finished:
+		return &ServerHandShakeFinished{}
 	}
 	return nil
 }
@@ -366,5 +368,22 @@ func (c *CertificateVerify) Deserialize(data []byte) int {
 	_ = binary.Read(buf, binary.BigEndian, &c.Length)
 	c.Signature = make([]byte, c.Length)
 	copy(c.Signature, buf.Next(int(c.Length)))
+	return len(data) - buf.Len()
+}
+
+type ServerHandShakeFinished struct {
+	HashedVerifier []byte
+}
+
+func (s *ServerHandShakeFinished) Serialize() []byte {
+	buf := new(bytes.Buffer)
+	buf.Write(s.HashedVerifier)
+	return buf.Bytes()
+}
+
+func (s *ServerHandShakeFinished) Deserialize(data []byte) int {
+	buf := bytes.NewBuffer(data)
+	s.HashedVerifier = make([]byte, len(data))
+	copy(s.HashedVerifier, data)
 	return len(data) - buf.Len()
 }

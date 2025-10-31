@@ -106,8 +106,12 @@ func (s *TLSSession) handShake() error {
 		log.Errorf("Failed on step getting server certificate: %v", err)
 		return err
 	}
-	if err := s.getServerCertificateVerify(); err != nil {
-		log.Errorf("Failed on step getting server certificate verify: %v", err)
+	if err := s.verifyServerCertificate(); err != nil {
+		log.Errorf("Failed on step verifying server certificate: %v", err)
+		return err
+	}
+	if err := s.verifyHandShakeFinished(); err != nil {
+		log.Errorf("Failed on step verifying handshake finished: %v", err)
 		return err
 	}
 	return nil
@@ -173,12 +177,6 @@ func (s *TLSSession) calculateHandshakeKeys() error {
 		return err
 	}
 
-	// concatenate hello records (clientHello + serverHello)
-	concatenatedHello := make([]byte, 0)
-	for _, record := range s.keyCalcRecords {
-		concatenatedHello = append(concatenatedHello, record.Fragment.Serialize()...)
-	}
-
 	// calculate handshake keys
 	// use sha256 hash func here since the server and client has been accepted on cipher suite with SHA256
 	hashFunc := sha256.New
@@ -188,6 +186,14 @@ func (s *TLSSession) calculateHandshakeKeys() error {
 		return hashedMessage[:]
 	}
 
+	// concatenate hello records (clientHello + serverHello)
+	concatenatedHello := make([]byte, 0)
+	for _, record := range s.keyCalcRecords {
+		concatenatedHello = append(concatenatedHello, record.Fragment.Serialize()...)
+	}
+	// hash concatenation
+	hashedHello := hashMessage(concatenatedHello)
+
 	var empty []byte
 	zeroSalt := make([]byte, 32)
 	zeroSecret := make([]byte, 32)
@@ -196,11 +202,11 @@ func (s *TLSSession) calculateHandshakeKeys() error {
 	derivedSecret := crypto.HKDFExpandLabel(hashFunc, earlySecret, "derived", hashMessage(empty), hashLength)
 	handShakeSecret := crypto.HKDFExtract(hashFunc, sharedSecret, derivedSecret)
 
-	clientSecret := crypto.HKDFExpandLabel(hashFunc, handShakeSecret, "c hs traffic", hashMessage(concatenatedHello), hashLength)
+	clientSecret := crypto.HKDFExpandLabel(hashFunc, handShakeSecret, "c hs traffic", hashedHello, hashLength)
 	clientHandShakeKey := crypto.HKDFExpandLabel(hashFunc, clientSecret, "key", empty, 16)
 	clientHandShakeIV := crypto.HKDFExpandLabel(hashFunc, clientSecret, "iv", empty, 12)
 
-	serverSecret := crypto.HKDFExpandLabel(hashFunc, handShakeSecret, "s hs traffic", hashMessage(concatenatedHello), hashLength)
+	serverSecret := crypto.HKDFExpandLabel(hashFunc, handShakeSecret, "s hs traffic", hashedHello, hashLength)
 	serverHandShakeKey := crypto.HKDFExpandLabel(hashFunc, serverSecret, "key", empty, 16)
 	serverHandShakeIV := crypto.HKDFExpandLabel(hashFunc, serverSecret, "iv", empty, 12)
 
@@ -257,7 +263,7 @@ func (s *TLSSession) getServerCertificate() error {
 	return nil
 }
 
-func (s *TLSSession) getServerCertificateVerify() error {
+func (s *TLSSession) verifyServerCertificate() error {
 	fragment, err := s.getDecryptedHandShakeMessage()
 	if err != nil {
 		return errors.New("can't decrypt server certificate - Caused by: " + err.Error())
@@ -273,6 +279,27 @@ func (s *TLSSession) getServerCertificateVerify() error {
 	log.Debugf("Server certificate verify signature algorithm: %v, len: %d", certificateVerify.SignatureAlgorithm, certificateVerify.Length)
 
 	// TODO: verify cert with root CA
+
+	return nil
+}
+
+func (s *TLSSession) verifyHandShakeFinished() error {
+	fragment, err := s.getDecryptedHandShakeMessage()
+	if err != nil {
+		return errors.New("can't decrypt server certificate - Caused by: " + err.Error())
+	}
+	handShake, ok := (fragment).(*protocol.HandShake)
+	if !ok {
+		return errors.New("failed on casting handshake message")
+	}
+	handShakeFinished, ok := (handShake.Body).(*protocol.ServerHandShakeFinished)
+	if !ok {
+		return errors.New("failed on casting handshake finished message")
+	}
+
+	log.Debugf("Server handshake finished hash verifier: %v", handShakeFinished.HashedVerifier)
+
+	// TODO: verify hashed handshake verifier
 
 	return nil
 }
