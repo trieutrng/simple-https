@@ -9,25 +9,25 @@ import (
 
 const RecordHeaderLen int = 5
 
-type RecordContentType uint8
+type ContentType uint8
 
 const (
-	Record_Invalid          RecordContentType = 0x00
-	Record_ChangeCipherSpec RecordContentType = 0x14
-	Record_Alert            RecordContentType = 0x15
-	Record_Handshake        RecordContentType = 0x16
-	Record_ApplicationData  RecordContentType = 0x17
-	Record_Heartbeat        RecordContentType = 0x18
+	Record_Invalid          ContentType = 0x00
+	Record_ChangeCipherSpec ContentType = 0x14
+	Record_Alert            ContentType = 0x15
+	Record_Handshake        ContentType = 0x16
+	Record_ApplicationData  ContentType = 0x17
+	Record_Heartbeat        ContentType = 0x18
 )
 
 type Record struct {
-	Type            RecordContentType
+	Type            ContentType
 	ProtocolVersion common.ProtocolVersion
 	Length          uint16
 	Fragment        common.ExchangeObject
 }
 
-func NewRecord(recordType RecordContentType, protocolVersion common.ProtocolVersion, fragment common.ExchangeObject) *Record {
+func NewRecord(recordType ContentType, protocolVersion common.ProtocolVersion, fragment common.ExchangeObject) *Record {
 	return &Record{
 		Type:            recordType,
 		ProtocolVersion: protocolVersion,
@@ -52,17 +52,19 @@ func (r *Record) Deserialize(data []byte) int {
 	_ = binary.Read(buf, binary.BigEndian, &r.Type)
 	_ = binary.Read(buf, binary.BigEndian, &r.ProtocolVersion)
 	_ = binary.Read(buf, binary.BigEndian, &r.Length)
-	r.Fragment = newFragment(r.Type)
+	r.Fragment = NewFragment(r.Type)
 	r.Fragment.Deserialize(buf.Next(int(r.Length)))
 	return len(data) - buf.Len()
 }
 
-func newFragment(recordContentType RecordContentType) common.ExchangeObject {
+func NewFragment(recordContentType ContentType) common.ExchangeObject {
 	switch recordContentType {
 	case Record_Handshake:
 		return &HandShake{}
 	case Record_ChangeCipherSpec:
 		return &ChangeCipherSpec{}
+	case Record_ApplicationData:
+		return &ApplicationData{}
 	case Record_Alert:
 		return &Alert{}
 	}

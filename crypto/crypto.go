@@ -117,7 +117,7 @@ func AESGCMDecrypt(key, iv, wrapper []byte) []byte {
 	return plaintext
 }
 
-func encrypt(key, iv, plaintext, additional []byte) []byte {
+func AESGCMEncrypt(key, iv, plaintext, additional []byte) []byte {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		panic(err.Error())

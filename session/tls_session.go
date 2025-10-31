@@ -39,6 +39,7 @@ type handShakeKeys struct {
 	serverHandShakeKey []byte
 	clientHandShakeIV  []byte // initialization vector
 	serverHandShakeIV  []byte // initialization vector
+	decryptedRecords   byte
 }
 
 type applicationKeys struct {
@@ -78,23 +79,31 @@ func (s *TLSSession) Read() ([]byte, error) {
 
 func (s *TLSSession) handShake() error {
 	if err := s.generateKeyExchange(); err != nil {
-		log.Errorf("Failed to generate key pair: %v", err)
+		log.Errorf("Failed on step generate key pair: %v", err)
 		return err
 	}
 	if err := s.clientHello(); err != nil {
-		log.Errorf("Failed to send client hello: %v", err)
+		log.Errorf("Failed on step sending client hello: %v", err)
 		return err
 	}
 	if err := s.serverHello(); err != nil {
-		log.Errorf("Failed to receive server hello: %v", err)
+		log.Errorf("Failed on step receiving server hello: %v", err)
 		return err
 	}
 	if err := s.calculateHandshakeKeys(); err != nil {
-		log.Errorf("Failed to calculate handshake keys: %v", err)
+		log.Errorf("Failed on step calculating handshake keys: %v", err)
 		return err
 	}
 	if err := s.serverChangeCipherSpec(); err != nil {
-		log.Errorf("Failed on receiving server change cipher spec: %v", err)
+		log.Errorf("Failed on step getting server change cipher spec: %v", err)
+		return err
+	}
+	if err := s.getServerEncryptedExtensions(); err != nil {
+		log.Errorf("Failed on step getting server encrypted extensions: %v", err)
+		return err
+	}
+	if err := s.getServerCertificate(); err != nil {
+		log.Errorf("Failed on step getting server certificate: %v", err)
 		return err
 	}
 	return nil
@@ -160,7 +169,7 @@ func (s *TLSSession) calculateHandshakeKeys() error {
 		return err
 	}
 
-	// calculate hello hash
+	// concatenate hello records (clientHello + serverHello)
 	concatenatedHello := make([]byte, 0)
 	for _, record := range s.keyCalcRecords {
 		concatenatedHello = append(concatenatedHello, record.Fragment.Serialize()...)
@@ -170,7 +179,6 @@ func (s *TLSSession) calculateHandshakeKeys() error {
 	// use sha256 hash func here since the server and client has been accepted on cipher suite with SHA256
 	hashFunc := sha256.New
 	hashLength := 32
-
 	hashMessage := func(message []byte) []byte {
 		hashedMessage := sha256.Sum256(message)
 		return hashedMessage[:]
@@ -215,33 +223,34 @@ func (s *TLSSession) serverChangeCipherSpec() error {
 	return nil
 }
 
-func (s *TLSSession) getRecord() (*protocol.Record, error) {
-	hdr := make([]byte, protocol.RecordHeaderLen)
-	_, err := io.ReadFull(s.conn, hdr)
+func (s *TLSSession) getServerEncryptedExtensions() error {
+	fragment, err := s.getDecryptedHandShakeMessage()
 	if err != nil {
-		return nil, err
+		return errors.New("can't decrypt server encrypted extensions - Caused by: " + err.Error())
 	}
+	handShake, ok := (fragment).(*protocol.HandShake)
+	if !ok {
+		return errors.New("failed on casting handshake message")
+	}
+	log.Debugf("Server encrypted extensions: %v", handShake.Body.Serialize())
+	return nil
+}
 
-	bodyLen := (int(hdr[3]) << 8) | int(hdr[4])
-	body := make([]byte, bodyLen)
-	_, err = io.ReadFull(s.conn, body)
+func (s *TLSSession) getServerCertificate() error {
+	fragment, err := s.getDecryptedHandShakeMessage()
 	if err != nil {
-		return nil, err
+		return errors.New("can't decrypt server certificate - Caused by: " + err.Error())
 	}
-
-	buf := new(bytes.Buffer)
-	buf.Write(hdr)
-	buf.Write(body)
-
-	record := protocol.Record{}
-	record.Deserialize(buf.Bytes())
-
-	if record.Type == protocol.Record_Alert {
-		alert := (record.Fragment).(*protocol.Alert).String()
-		return nil, errors.New(alert)
+	handShake, ok := (fragment).(*protocol.HandShake)
+	if !ok {
+		return errors.New("failed on casting handshake message")
 	}
-
-	return &record, nil
+	certificate, ok := (handShake.Body).(*protocol.Certificate)
+	if !ok {
+		return errors.New("failed on casting certificate message")
+	}
+	log.Debugf("Server certificate: %v", certificate.Serialize())
+	return nil
 }
 
 func (s *TLSSession) getClientHelloRecord() (*protocol.Record, error) {
@@ -309,6 +318,66 @@ func (s *TLSSession) getClientHelloRecord() (*protocol.Record, error) {
 		common.TLS_1_0,
 		protocol.NewHandShake(common.HandShake_ClientHello, clientHello),
 	), nil
+}
+
+func (s *TLSSession) getDecryptedHandShakeMessage() (common.ExchangeObject, error) {
+	record, err := s.getRecord()
+	if err != nil {
+		return nil, err
+	}
+
+	// every upcoming record would be encrypted with IV XOR'ed with incremental number
+	// for the purpose of making identical messages have same encryption
+	lenIV := len(s.keys.handShakeKeys.serverHandShakeIV)
+	s.keys.handShakeKeys.serverHandShakeIV[lenIV-1] ^= s.keys.handShakeKeys.decryptedRecords
+	s.keys.handShakeKeys.decryptedRecords += 1
+
+	payload := crypto.AESGCMDecrypt(s.keys.handShakeKeys.serverHandShakeKey, s.keys.handShakeKeys.serverHandShakeIV, record.Serialize())
+	bound := len(payload) - 1
+
+	// get rid of zeros which is optional padding in RFC8446
+	// https://datatracker.ietf.org/doc/html/rfc8446#autoid-60
+	for bound >= 0 && payload[bound] == 0 {
+		bound--
+	}
+	if bound < 0 {
+		return nil, errors.New("can't get content type")
+	}
+
+	decryptedContentType := protocol.ContentType(payload[bound])
+	fragment := protocol.NewFragment(decryptedContentType)
+	fragment.Deserialize(payload[:bound])
+
+	return fragment, nil
+}
+
+func (s *TLSSession) getRecord() (*protocol.Record, error) {
+	hdr := make([]byte, protocol.RecordHeaderLen)
+	_, err := io.ReadFull(s.conn, hdr)
+	if err != nil {
+		return nil, err
+	}
+
+	bodyLen := (int(hdr[3]) << 8) | int(hdr[4])
+	body := make([]byte, bodyLen)
+	_, err = io.ReadFull(s.conn, body)
+	if err != nil {
+		return nil, err
+	}
+
+	buf := new(bytes.Buffer)
+	buf.Write(hdr)
+	buf.Write(body)
+
+	record := protocol.Record{}
+	record.Deserialize(buf.Bytes())
+
+	if record.Type == protocol.Record_Alert {
+		alert := (record.Fragment).(*protocol.Alert).String()
+		return nil, errors.New(alert)
+	}
+
+	return &record, nil
 }
 
 func openTcp(domain string) (net.Conn, error) {

@@ -48,6 +48,10 @@ func newHandshakeBody(handshakeType common.HandshakeType) common.ExchangeObject 
 		return &ClientHello{}
 	case common.HandShake_ServerHello:
 		return &ServerHello{}
+	case common.HandShake_EncryptedExtensions:
+		return &server.Extensions{} // server only
+	case common.HandShake_Certificate:
+		return &Certificate{}
 	}
 	return nil
 }
@@ -246,6 +250,96 @@ func (s *ServerHello) Deserialize(data []byte) int {
 
 	s.Extensions = server.Extensions{}
 	read += s.Extensions.Deserialize(data[read:])
+
+	return read
+}
+
+type Certificate struct {
+	RequestContext     CertificateRequestContext
+	Length             int // the actual type is uint24 as RFC8446, using int as placeholder, would treat it as uint24 in the serializing and deserializing
+	CertificateEntries []CertificateEntry
+}
+
+func (c *Certificate) Serialize() []byte {
+	buf := new(bytes.Buffer)
+	buf.Write(c.RequestContext.Serialize())
+
+	certificateEntriesBuf := new(bytes.Buffer)
+	for _, entry := range c.CertificateEntries {
+		_ = binary.Write(certificateEntriesBuf, binary.BigEndian, entry.Serialize())
+	}
+	certificateEntries := certificateEntriesBuf.Bytes()
+
+	buf.Write(helpers.MarshalUint24(len(certificateEntries)))
+	buf.Write(certificateEntries)
+
+	return buf.Bytes()
+}
+
+func (c *Certificate) Deserialize(data []byte) int {
+	buf := bytes.NewBuffer(data)
+
+	c.RequestContext = CertificateRequestContext{}
+	buf.Next(c.RequestContext.Deserialize(data))
+
+	c.Length = helpers.UnmarshalUint24(buf.Next(3))
+
+	certEntriesData := buf.Next(c.Length)
+	c.CertificateEntries = make([]CertificateEntry, 0)
+	read := 0
+	for read < len(certEntriesData) {
+		certEntry := CertificateEntry{}
+		read += certEntry.Deserialize(certEntriesData[read:])
+		c.CertificateEntries = append(c.CertificateEntries, certEntry)
+	}
+
+	return len(data) - buf.Len()
+}
+
+type CertificateRequestContext struct {
+	Length byte
+	Data   []byte
+}
+
+func (c *CertificateRequestContext) Serialize() []byte {
+	buf := new(bytes.Buffer)
+	_ = binary.Write(buf, binary.BigEndian, c.Length)
+	buf.Write(c.Data)
+	return buf.Bytes()
+}
+
+func (c *CertificateRequestContext) Deserialize(data []byte) int {
+	buf := bytes.NewBuffer(data)
+	_ = binary.Read(buf, binary.BigEndian, &c.Length)
+	c.Data = make([]byte, c.Length)
+	copy(c.Data, buf.Next(int(c.Length)))
+	return len(data) - buf.Len()
+}
+
+type CertificateEntry struct {
+	Length      int // the actual type is uint24 as RFC8446, using int as placeholder, would treat it as uint24 in the serializing and deserializing
+	Certificate []byte
+	Extensions  server.Extensions
+}
+
+func (c *CertificateEntry) Serialize() []byte {
+	buf := new(bytes.Buffer)
+	buf.Write(helpers.MarshalUint24(len(c.Certificate)))
+	buf.Write(c.Certificate)
+	buf.Write(c.Extensions.Serialize())
+	return buf.Bytes()
+}
+
+func (c *CertificateEntry) Deserialize(data []byte) int {
+	buf := bytes.NewBuffer(data)
+	c.Length = helpers.UnmarshalUint24(buf.Next(3))
+	c.Certificate = make([]byte, c.Length)
+	copy(c.Certificate, buf.Next(c.Length))
+
+	c.Extensions = server.Extensions{}
+
+	read := len(data) - buf.Len()
+	read += c.Extensions.Deserialize(data[read:])
 
 	return read
 }
