@@ -329,10 +329,13 @@ func (s *TLSSession) getDecryptedHandShakeMessage() (common.ExchangeObject, erro
 	// every upcoming record would be encrypted with IV XOR'ed with incremental number
 	// for the purpose of making identical messages have same encryption
 	lenIV := len(s.keys.handShakeKeys.serverHandShakeIV)
-	s.keys.handShakeKeys.serverHandShakeIV[lenIV-1] ^= s.keys.handShakeKeys.decryptedRecords
+	XORedIV := make([]byte, lenIV)
+	copy(XORedIV, s.keys.handShakeKeys.serverHandShakeIV)
+	XORedIV[lenIV-1] ^= s.keys.handShakeKeys.decryptedRecords
+
 	s.keys.handShakeKeys.decryptedRecords += 1
 
-	payload := crypto.AESGCMDecrypt(s.keys.handShakeKeys.serverHandShakeKey, s.keys.handShakeKeys.serverHandShakeIV, record.Serialize())
+	payload := crypto.AESGCMDecrypt(s.keys.handShakeKeys.serverHandShakeKey, XORedIV, record.Serialize())
 	bound := len(payload) - 1
 
 	// get rid of zeros which is optional padding in RFC8446
