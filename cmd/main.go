@@ -14,8 +14,6 @@ func init() {
 }
 
 func main() {
-	//domain := "trieutrng.github.io"
-	//domain := "jvns.ca"
 	domain := "eatonphil.com"
 	var err error
 

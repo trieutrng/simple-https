@@ -96,7 +96,6 @@ func (s *TLSSession) Read() ([]byte, error) {
 			log.Error("failed to read application data")
 			return nil, err
 		}
-
 		handShake, ok := (record).(*protocol.HandShake)
 		if ok && handShake.Type == common.HandShake_NewSessionTicket {
 			log.Debugf("received new session ticket: \n\t%v", handShake.Body)
@@ -360,14 +359,11 @@ func (s *TLSSession) verifyHandShakeFinished() error {
 		concatenatedHandShake = append(concatenatedHandShake, msg.Serialize()...)
 	}
 
-	var empty []byte
-
 	hashedHandShake := hashMessage(concatenatedHandShake)
-	finishedKey := crypto.HKDFExpandLabel(s.hashFunc, s.keys.handShakeKeys.serverSecret, "finished", hashMessage(empty), hashLength)
+	finishedKey := crypto.HKDFExpandLabel(s.hashFunc, s.keys.handShakeKeys.serverSecret, "finished", []byte{}, hashLength)
 
-	// TODO: make this works
 	if ok := crypto.VerifyHMACSHA256(finishedKey, hashedHandShake, handShakeFinished.HashedVerifier); !ok {
-		//return errors.New("finished hash verification failed")
+		return errors.New("finished hash verification failed")
 	}
 
 	return nil
@@ -441,9 +437,9 @@ func (s *TLSSession) sendClientHandShakeFinished() error {
 	for _, msg := range s.msgForKeyCalc {
 		concatenatedHandShake = append(concatenatedHandShake, msg.Serialize()...)
 	}
-	var empty []byte
+
 	hashedHandShake := hashMessage(concatenatedHandShake)
-	finishedKey := crypto.HKDFExpandLabel(s.hashFunc, s.keys.handShakeKeys.clientSecret, "finished", hashMessage(empty), hashLength)
+	finishedKey := crypto.HKDFExpandLabel(s.hashFunc, s.keys.handShakeKeys.clientSecret, "finished", []byte{}, hashLength)
 	verifier := crypto.ComputeHMACSHA256(finishedKey, hashedHandShake)
 
 	handShakeFinished := protocol.NewHandShake(
