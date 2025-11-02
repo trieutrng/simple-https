@@ -9,6 +9,12 @@ type ChangeCipherSpec struct {
 	Payload byte
 }
 
+func NewChangeCipherSpec(payload byte) *ChangeCipherSpec {
+	return &ChangeCipherSpec{
+		Payload: payload,
+	}
+}
+
 func (c *ChangeCipherSpec) Serialize() []byte {
 	buf := new(bytes.Buffer)
 	_ = binary.Write(buf, binary.BigEndian, c.Payload)

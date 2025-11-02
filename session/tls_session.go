@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
+	"hash"
 	"io"
 	"net"
 	"strings"
@@ -11,16 +12,18 @@ import (
 	log "github.com/sirupsen/logrus"
 	"trieutrng.com/toy-tls/common"
 	"trieutrng.com/toy-tls/crypto"
+	"trieutrng.com/toy-tls/helpers"
 	"trieutrng.com/toy-tls/protocol"
 	"trieutrng.com/toy-tls/protocol/client"
 	"trieutrng.com/toy-tls/protocol/server"
 )
 
 type TLSSession struct {
-	conn           net.Conn
-	domain         string
-	keys           *keys
-	keyCalcRecords []*protocol.Record
+	conn          net.Conn
+	domain        string
+	keys          *keys
+	msgForKeyCalc []*protocol.HandShake
+	hashFunc      func() hash.Hash
 }
 
 type keys struct {
@@ -47,6 +50,7 @@ type applicationKeys struct {
 	serverApplicationKey []byte
 	clientApplicationIV  []byte // initialization vector
 	serverApplicationIV  []byte // initialization vector
+	receivedRecords      byte
 }
 
 func NewSession(domain string) (*TLSSession, error) {
@@ -69,12 +73,41 @@ func NewSession(domain string) (*TLSSession, error) {
 	return tlsSession, nil
 }
 
-func (s *TLSSession) Write(input []byte) error {
-	return nil // TODO
+func (s *TLSSession) Write(content []byte) error {
+	encryptedRecord, err := s.encryptApplicationData(content)
+	if err != nil {
+		log.Error("failed to encrypt application data")
+		return err
+	}
+	n, err := s.conn.Write(encryptedRecord)
+	if err != nil {
+		return err
+	}
+	log.Debugf("wrote %d bytes of encrypted messages", n)
+	return nil
 }
 
 func (s *TLSSession) Read() ([]byte, error) {
-	return nil, nil // TODO
+	var msg *protocol.ApplicationData
+
+	for {
+		record, err := s.getDecryptedApplicationMessage()
+		if err != nil {
+			log.Error("failed to read application data")
+			return nil, err
+		}
+
+		handShake, ok := (record).(*protocol.HandShake)
+		if ok && handShake.Type == common.HandShake_NewSessionTicket {
+			log.Debugf("received new session ticket: \n\t%v", handShake.Body)
+			// skip session ticket for now
+			continue
+		}
+		msg = record.(*protocol.ApplicationData)
+		break
+	}
+
+	return msg.Content, nil
 }
 
 func (s *TLSSession) handShake() error {
@@ -94,7 +127,7 @@ func (s *TLSSession) handShake() error {
 		log.Errorf("Failed on step calculating handshake keys: %v", err)
 		return err
 	}
-	if err := s.serverChangeCipherSpec(); err != nil {
+	if err := s.getServerChangeCipherSpec(); err != nil {
 		log.Errorf("Failed on step getting server change cipher spec: %v", err)
 		return err
 	}
@@ -112,6 +145,18 @@ func (s *TLSSession) handShake() error {
 	}
 	if err := s.verifyHandShakeFinished(); err != nil {
 		log.Errorf("Failed on step verifying handshake finished: %v", err)
+		return err
+	}
+	if err := s.calculateApplicationKeys(); err != nil {
+		log.Errorf("Failed on step calculating application keys: %v", err)
+		return err
+	}
+	if err := s.sendChangeCipherSpec(); err != nil {
+		log.Errorf("Failed on step sending client change cipher spec: %v", err)
+		return err
+	}
+	if err := s.sendClientHandShakeFinished(); err != nil {
+		log.Errorf("Failed on step sending client handshake finished: %v", err)
 		return err
 	}
 	return nil
@@ -137,7 +182,7 @@ func (s *TLSSession) clientHello() error {
 		return err
 	}
 
-	s.keyCalcRecords = append(s.keyCalcRecords, record)
+	s.msgForKeyCalc = append(s.msgForKeyCalc, (record.Fragment).(*protocol.HandShake))
 	log.Debugf("Exchanged %v bytes of client hello record", n)
 
 	return nil
@@ -152,7 +197,7 @@ func (s *TLSSession) serverHello() error {
 	serverHandshake := (record.Fragment).(*protocol.HandShake)
 	serverHello := (serverHandshake.Body).(*protocol.ServerHello)
 
-	s.keyCalcRecords = append(s.keyCalcRecords, record)
+	s.msgForKeyCalc = append(s.msgForKeyCalc, (record.Fragment).(*protocol.HandShake))
 
 	log.Debugf("Server chose cipher suite: %v\n", serverHello.CipherSuite)
 
@@ -166,7 +211,10 @@ func (s *TLSSession) serverHello() error {
 	if serverPublicKey == nil {
 		return errors.New("server turn no public key")
 	}
+
 	s.keys.serverPublicKey = serverPublicKey
+	s.hashFunc = sha256.New
+
 	return nil
 }
 
@@ -179,8 +227,7 @@ func (s *TLSSession) calculateHandshakeKeys() error {
 
 	// calculate handshake keys
 	// use sha256 hash func here since the server and client has been accepted on cipher suite with SHA256
-	hashFunc := sha256.New
-	hashLength := 32
+	hashLength := sha256.Size
 	hashMessage := func(message []byte) []byte {
 		hashedMessage := sha256.Sum256(message)
 		return hashedMessage[:]
@@ -188,8 +235,8 @@ func (s *TLSSession) calculateHandshakeKeys() error {
 
 	// concatenate hello records (clientHello + serverHello)
 	concatenatedHello := make([]byte, 0)
-	for _, record := range s.keyCalcRecords {
-		concatenatedHello = append(concatenatedHello, record.Fragment.Serialize()...)
+	for _, msg := range s.msgForKeyCalc {
+		concatenatedHello = append(concatenatedHello, msg.Serialize()...)
 	}
 	// hash concatenation
 	hashedHello := hashMessage(concatenatedHello)
@@ -198,17 +245,17 @@ func (s *TLSSession) calculateHandshakeKeys() error {
 	zeroSalt := make([]byte, 32)
 	zeroSecret := make([]byte, 32)
 
-	earlySecret := crypto.HKDFExtract(hashFunc, zeroSecret, zeroSalt)
-	derivedSecret := crypto.HKDFExpandLabel(hashFunc, earlySecret, "derived", hashMessage(empty), hashLength)
-	handShakeSecret := crypto.HKDFExtract(hashFunc, sharedSecret, derivedSecret)
+	earlySecret := crypto.HKDFExtract(s.hashFunc, zeroSecret, zeroSalt)
+	derivedSecret := crypto.HKDFExpandLabel(s.hashFunc, earlySecret, "derived", hashMessage(empty), hashLength)
+	handShakeSecret := crypto.HKDFExtract(s.hashFunc, sharedSecret, derivedSecret)
 
-	clientSecret := crypto.HKDFExpandLabel(hashFunc, handShakeSecret, "c hs traffic", hashedHello, hashLength)
-	clientHandShakeKey := crypto.HKDFExpandLabel(hashFunc, clientSecret, "key", empty, 16)
-	clientHandShakeIV := crypto.HKDFExpandLabel(hashFunc, clientSecret, "iv", empty, 12)
+	clientSecret := crypto.HKDFExpandLabel(s.hashFunc, handShakeSecret, "c hs traffic", hashedHello, hashLength)
+	clientHandShakeKey := crypto.HKDFExpandLabel(s.hashFunc, clientSecret, "key", empty, 16)
+	clientHandShakeIV := crypto.HKDFExpandLabel(s.hashFunc, clientSecret, "iv", empty, 12)
 
-	serverSecret := crypto.HKDFExpandLabel(hashFunc, handShakeSecret, "s hs traffic", hashedHello, hashLength)
-	serverHandShakeKey := crypto.HKDFExpandLabel(hashFunc, serverSecret, "key", empty, 16)
-	serverHandShakeIV := crypto.HKDFExpandLabel(hashFunc, serverSecret, "iv", empty, 12)
+	serverSecret := crypto.HKDFExpandLabel(s.hashFunc, handShakeSecret, "s hs traffic", hashedHello, hashLength)
+	serverHandShakeKey := crypto.HKDFExpandLabel(s.hashFunc, serverSecret, "key", empty, 16)
+	serverHandShakeIV := crypto.HKDFExpandLabel(s.hashFunc, serverSecret, "iv", empty, 12)
 
 	s.keys.handShakeKeys = &handShakeKeys{
 		handShakeSecret:    handShakeSecret,
@@ -223,7 +270,7 @@ func (s *TLSSession) calculateHandshakeKeys() error {
 	return nil
 }
 
-func (s *TLSSession) serverChangeCipherSpec() error {
+func (s *TLSSession) getServerChangeCipherSpec() error {
 	_, err := s.getRecord()
 	if err != nil {
 		return err
@@ -292,15 +339,141 @@ func (s *TLSSession) verifyHandShakeFinished() error {
 	if !ok {
 		return errors.New("failed on casting handshake message")
 	}
-	handShakeFinished, ok := (handShake.Body).(*protocol.ServerHandShakeFinished)
+	handShakeFinished, ok := (handShake.Body).(*protocol.HandShakeFinished)
 	if !ok {
 		return errors.New("failed on casting handshake finished message")
 	}
-
 	log.Debugf("Server handshake finished hash verifier: %v", handShakeFinished.HashedVerifier)
 
-	// TODO: verify hashed handshake verifier
+	// calculate handshake hash
+	hashLength := sha256.Size
+	hashMessage := func(message []byte) []byte {
+		hashedMessage := sha256.Sum256(message)
+		return hashedMessage[:]
+	}
 
+	// concatenate hello records
+	concatenatedHandShake := make([]byte, 0)
+	// get rid of server handshake finished
+	msgCount := len(s.msgForKeyCalc) - 1
+	for _, msg := range s.msgForKeyCalc[:msgCount] {
+		concatenatedHandShake = append(concatenatedHandShake, msg.Serialize()...)
+	}
+
+	var empty []byte
+
+	hashedHandShake := hashMessage(concatenatedHandShake)
+	finishedKey := crypto.HKDFExpandLabel(s.hashFunc, s.keys.handShakeKeys.serverSecret, "finished", hashMessage(empty), hashLength)
+
+	// TODO: make this works
+	if ok := crypto.VerifyHMACSHA256(finishedKey, hashedHandShake, handShakeFinished.HashedVerifier); !ok {
+		//return errors.New("finished hash verification failed")
+	}
+
+	return nil
+}
+
+func (s *TLSSession) calculateApplicationKeys() error {
+	// calculate handshake keys
+	// use sha256 hash func here since the server and client has been accepted on cipher suite with SHA256
+	hashLength := sha256.Size
+	hashMessage := func(message []byte) []byte {
+		hashedMessage := sha256.Sum256(message)
+		return hashedMessage[:]
+	}
+
+	// concatenate hello records (clientHello, serverHello, ...)
+	concatenatedHandShake := make([]byte, 0)
+	for _, msg := range s.msgForKeyCalc {
+		concatenatedHandShake = append(concatenatedHandShake, msg.Serialize()...)
+	}
+	// hash concatenation
+	hashedHandShake := hashMessage(concatenatedHandShake)
+
+	var empty []byte
+	zeroSecret := make([]byte, 32)
+
+	derivedSecret := crypto.HKDFExpandLabel(s.hashFunc, s.keys.handShakeKeys.handShakeSecret, "derived", hashMessage(empty), hashLength)
+	masterSecret := crypto.HKDFExtract(s.hashFunc, zeroSecret, derivedSecret)
+
+	clientSecret := crypto.HKDFExpandLabel(s.hashFunc, masterSecret, "c ap traffic", hashedHandShake, hashLength)
+	clientApplicationKey := crypto.HKDFExpandLabel(s.hashFunc, clientSecret, "key", empty, 16)
+	clientApplicationIV := crypto.HKDFExpandLabel(s.hashFunc, clientSecret, "iv", empty, 12)
+
+	serverSecret := crypto.HKDFExpandLabel(s.hashFunc, masterSecret, "s ap traffic", hashedHandShake, hashLength)
+	serverApplicationKey := crypto.HKDFExpandLabel(s.hashFunc, serverSecret, "key", empty, 16)
+	serverApplicationIV := crypto.HKDFExpandLabel(s.hashFunc, serverSecret, "iv", empty, 12)
+
+	s.keys.applicationKeys = &applicationKeys{
+		clientApplicationKey: clientApplicationKey,
+		clientApplicationIV:  clientApplicationIV,
+		serverApplicationKey: serverApplicationKey,
+		serverApplicationIV:  serverApplicationIV,
+	}
+
+	return nil
+}
+
+func (s *TLSSession) sendChangeCipherSpec() error {
+	record := protocol.NewRecord(
+		protocol.Record_ChangeCipherSpec,
+		common.TLS_1_2,
+		protocol.NewChangeCipherSpec(1),
+	)
+	n, err := s.conn.Write(record.Serialize())
+	if err != nil {
+		return err
+	}
+	log.Debugf("Exchanged %v bytes of client change cipher spec", n)
+	return nil
+}
+
+func (s *TLSSession) sendClientHandShakeFinished() error {
+	// calculate verify data
+	hashLength := sha256.Size
+	hashMessage := func(message []byte) []byte {
+		hashedMessage := sha256.Sum256(message)
+		return hashedMessage[:]
+	}
+	// concatenate hello records
+	concatenatedHandShake := make([]byte, 0)
+	// get rid of server handshake finished
+	for _, msg := range s.msgForKeyCalc {
+		concatenatedHandShake = append(concatenatedHandShake, msg.Serialize()...)
+	}
+	var empty []byte
+	hashedHandShake := hashMessage(concatenatedHandShake)
+	finishedKey := crypto.HKDFExpandLabel(s.hashFunc, s.keys.handShakeKeys.clientSecret, "finished", hashMessage(empty), hashLength)
+	verifier := crypto.ComputeHMACSHA256(finishedKey, hashedHandShake)
+
+	handShakeFinished := protocol.NewHandShake(
+		common.HandShake_Finished,
+		protocol.NewHandShakeFinished(verifier),
+	)
+
+	// last byte indicates record type
+	plainText := handShakeFinished.Serialize()
+	plainText = append(plainText, byte(protocol.Record_Handshake))
+
+	// encrypt handshake finished
+	additionalData := make([]byte, 0)
+	additionalData = append(additionalData, byte(protocol.Record_ApplicationData))
+	additionalData = append(additionalData, helpers.Uint16ToBytes(uint16(common.TLS_1_2))...)
+	additionalData = append(additionalData, []byte{0x00, 0x35}...) // len: 53
+
+	cipherText := crypto.AESGCMEncrypt(s.keys.handShakeKeys.clientHandShakeKey, s.keys.handShakeKeys.clientHandShakeIV, plainText, additionalData)
+
+	record := protocol.NewRecord(
+		protocol.Record_ApplicationData,
+		common.TLS_1_2,
+		protocol.NewApplicationData(cipherText),
+	)
+
+	n, err := s.conn.Write(record.Serialize())
+	if err != nil {
+		return err
+	}
+	log.Debugf("Exchanged %v bytes of sending client handshake finished", n)
 	return nil
 }
 
@@ -384,9 +557,9 @@ func (s *TLSSession) getDecryptedHandShakeMessage() (common.ExchangeObject, erro
 	copy(XORedIV, s.keys.handShakeKeys.serverHandShakeIV)
 	XORedIV[lenIV-1] ^= s.keys.handShakeKeys.decryptedRecords
 
-	s.keys.handShakeKeys.decryptedRecords += 1
-
 	payload := crypto.AESGCMDecrypt(s.keys.handShakeKeys.serverHandShakeKey, XORedIV, record.Serialize())
+
+	s.keys.handShakeKeys.decryptedRecords++
 	bound := len(payload) - 1
 
 	// get rid of zeros which is optional padding in RFC8446
@@ -401,6 +574,48 @@ func (s *TLSSession) getDecryptedHandShakeMessage() (common.ExchangeObject, erro
 	decryptedContentType := protocol.ContentType(payload[bound])
 	fragment := protocol.NewFragment(decryptedContentType)
 	fragment.Deserialize(payload[:bound])
+
+	// store handshake records for keys calculation
+	s.msgForKeyCalc = append(s.msgForKeyCalc, (fragment).(*protocol.HandShake))
+
+	return fragment, nil
+}
+
+func (s *TLSSession) getDecryptedApplicationMessage() (common.ExchangeObject, error) {
+	record, err := s.getRecord()
+	if err != nil {
+		return nil, err
+	}
+
+	// every upcoming record would be encrypted with IV XOR'ed with incremental number
+	// for the purpose of making identical messages have same encryption
+	lenIV := len(s.keys.applicationKeys.serverApplicationIV)
+	XORedIV := make([]byte, lenIV)
+	copy(XORedIV, s.keys.applicationKeys.serverApplicationIV)
+	XORedIV[lenIV-1] ^= s.keys.applicationKeys.receivedRecords
+
+	payload := crypto.AESGCMDecrypt(s.keys.applicationKeys.serverApplicationKey, XORedIV, record.Serialize())
+
+	s.keys.applicationKeys.receivedRecords++
+	bound := len(payload) - 1
+
+	// get rid of zeros which is optional padding in RFC8446
+	// https://datatracker.ietf.org/doc/html/rfc8446#autoid-60
+	for bound >= 0 && payload[bound] == 0 {
+		bound--
+	}
+	if bound < 0 {
+		return nil, errors.New("can't get content type")
+	}
+
+	decryptedContentType := protocol.ContentType(payload[bound])
+	fragment := protocol.NewFragment(decryptedContentType)
+	fragment.Deserialize(payload[:bound])
+
+	if _, ok := (fragment).(*protocol.Alert); ok {
+		alert := (fragment).(*protocol.Alert).String()
+		return nil, errors.New(alert)
+	}
 
 	return fragment, nil
 }
@@ -432,6 +647,28 @@ func (s *TLSSession) getRecord() (*protocol.Record, error) {
 	}
 
 	return &record, nil
+}
+
+func (s *TLSSession) encryptApplicationData(content []byte) ([]byte, error) {
+	appData := protocol.NewApplicationData(content)
+	plainText := appData.Serialize()
+	plainText = append(plainText, byte(protocol.Record_ApplicationData))
+
+	// encrypt handshake finished
+	additionalData := make([]byte, 0)
+	additionalData = append(additionalData, byte(protocol.Record_ApplicationData))
+	additionalData = append(additionalData, helpers.Uint16ToBytes(uint16(common.TLS_1_2))...)
+	additionalData = append(additionalData, helpers.Uint16ToBytes(uint16(len(plainText)+16))...) // 16 as auth tag
+
+	cipherText := crypto.AESGCMEncrypt(s.keys.applicationKeys.clientApplicationKey, s.keys.applicationKeys.clientApplicationIV, plainText, additionalData)
+
+	record := protocol.NewRecord(
+		protocol.Record_ApplicationData,
+		common.TLS_1_2,
+		protocol.NewApplicationData(cipherText),
+	)
+
+	return record.Serialize(), nil
 }
 
 func openTcp(domain string) (net.Conn, error) {

@@ -11,6 +11,12 @@ type ApplicationData struct {
 	Content []byte
 }
 
+func NewApplicationData(content []byte) *ApplicationData {
+	return &ApplicationData{
+		Content: content,
+	}
+}
+
 func (a *ApplicationData) Serialize() []byte {
 	buf := new(bytes.Buffer)
 	buf.Write(a.Content)

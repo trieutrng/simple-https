@@ -3,6 +3,7 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 
 	"trieutrng.com/toy-tls/common"
 	"trieutrng.com/toy-tls/helpers"
@@ -55,7 +56,9 @@ func newHandshakeBody(handshakeType common.HandshakeType) common.ExchangeObject 
 	case common.HandShake_CertificateVerify:
 		return &CertificateVerify{}
 	case common.HandShake_Finished:
-		return &ServerHandShakeFinished{}
+		return &HandShakeFinished{}
+	case common.HandShake_NewSessionTicket:
+		return &NewSessionTicket{}
 	}
 	return nil
 }
@@ -307,7 +310,7 @@ type CertificateRequestContext struct {
 
 func (c *CertificateRequestContext) Serialize() []byte {
 	buf := new(bytes.Buffer)
-	_ = binary.Write(buf, binary.BigEndian, c.Length)
+	_ = binary.Write(buf, binary.BigEndian, byte(len(c.Data)))
 	buf.Write(c.Data)
 	return buf.Bytes()
 }
@@ -371,19 +374,67 @@ func (c *CertificateVerify) Deserialize(data []byte) int {
 	return len(data) - buf.Len()
 }
 
-type ServerHandShakeFinished struct {
+type HandShakeFinished struct {
 	HashedVerifier []byte
 }
 
-func (s *ServerHandShakeFinished) Serialize() []byte {
+func NewHandShakeFinished(verifier []byte) *HandShakeFinished {
+	return &HandShakeFinished{
+		HashedVerifier: verifier,
+	}
+}
+
+func (s *HandShakeFinished) Serialize() []byte {
 	buf := new(bytes.Buffer)
 	buf.Write(s.HashedVerifier)
 	return buf.Bytes()
 }
 
-func (s *ServerHandShakeFinished) Deserialize(data []byte) int {
+func (s *HandShakeFinished) Deserialize(data []byte) int {
 	buf := bytes.NewBuffer(data)
 	s.HashedVerifier = make([]byte, len(data))
 	copy(s.HashedVerifier, data)
 	return len(data) - buf.Len()
+}
+
+type NewSessionTicket struct {
+	TicketLifeTime uint32
+	TicketAgeAdd   uint32
+	LenNonce       byte
+	Nonce          []byte
+	LenTicket      uint16
+	Ticket         []byte
+	Extensions     server.Extensions
+}
+
+func (t *NewSessionTicket) Serialize() []byte {
+	buf := new(bytes.Buffer)
+	_ = binary.Write(buf, binary.BigEndian, t.TicketLifeTime)
+	_ = binary.Write(buf, binary.BigEndian, t.TicketAgeAdd)
+	_ = binary.Write(buf, binary.BigEndian, t.LenNonce)
+	buf.Write(t.Nonce)
+	_ = binary.Write(buf, binary.BigEndian, t.LenTicket)
+	buf.Write(t.Ticket)
+	buf.Write(t.Extensions.Serialize())
+	return buf.Bytes()
+}
+
+func (t *NewSessionTicket) Deserialize(data []byte) int {
+	buf := bytes.NewBuffer(data)
+	_ = binary.Read(buf, binary.BigEndian, &t.TicketLifeTime)
+	_ = binary.Read(buf, binary.BigEndian, &t.TicketAgeAdd)
+	_ = binary.Read(buf, binary.BigEndian, &t.LenNonce)
+	t.Nonce = make([]byte, t.LenNonce)
+	copy(t.Nonce, buf.Next(int(t.LenNonce)))
+	_ = binary.Read(buf, binary.BigEndian, &t.LenTicket)
+	t.Ticket = make([]byte, t.LenTicket)
+	copy(t.Ticket, buf.Next(int(t.LenTicket)))
+	t.Extensions = server.Extensions{}
+	read := len(data) - buf.Len()
+	read += t.Extensions.Deserialize(data[read:])
+	return read
+}
+
+func (t *NewSessionTicket) String() string {
+	return fmt.Sprintf("NewSessionTicket{\n\t\tLifeTime: %d (s),\n\t\tLength: %d,\n\t\tTicket: %d}", t.TicketLifeTime, t.LenTicket, t.Ticket)
 }

@@ -66,6 +66,7 @@ type HandshakeType uint8
 const (
 	HandShake_ClientHello         HandshakeType = 0x01
 	HandShake_ServerHello         HandshakeType = 0x02
+	HandShake_NewSessionTicket    HandshakeType = 0x04
 	HandShake_EncryptedExtensions HandshakeType = 0x08
 	HandShake_Certificate         HandshakeType = 0x0b
 	HandShake_CertificateRequest  HandshakeType = 0x0d

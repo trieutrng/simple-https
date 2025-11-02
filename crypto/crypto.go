@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
@@ -79,7 +80,7 @@ func HKDFExpandLabel(hashFunc func() hash.Hash, secret []byte, label string, con
 	hkdfLabel := new(bytes.Buffer)
 
 	// uint16 length
-	binary.Write(hkdfLabel, binary.BigEndian, uint16(length))
+	_ = binary.Write(hkdfLabel, binary.BigEndian, uint16(length))
 
 	// opaque label = "tls13 " + label
 	fullLabel := append([]byte("tls13 "), label...)
@@ -126,6 +127,16 @@ func AESGCMEncrypt(key, iv, plaintext, additional []byte) []byte {
 	if err != nil {
 		panic(err.Error())
 	}
-	ciphertext := aesgcm.Seal(nil, iv, plaintext, additional)
-	return append(additional, ciphertext...)
+	return aesgcm.Seal(nil, iv, plaintext, additional)
+}
+
+func ComputeHMACSHA256(key, message []byte) []byte {
+	h := hmac.New(sha256.New, key)
+	h.Write(message)
+	return h.Sum(nil)
+}
+
+func VerifyHMACSHA256(key, message, mac []byte) bool {
+	expected := ComputeHMACSHA256(key, message)
+	return hmac.Equal(expected, mac)
 }
