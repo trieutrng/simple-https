@@ -5,9 +5,9 @@ import (
 	"crypto/sha256"
 	"errors"
 	"hash"
-	"io"
 	"net"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"trieutrng.com/toy-tls/common"
@@ -50,7 +50,8 @@ type applicationKeys struct {
 	serverApplicationKey []byte
 	clientApplicationIV  []byte // initialization vector
 	serverApplicationIV  []byte // initialization vector
-	receivedRecords      byte
+	encryptedRecords     byte
+	decryptedRecords     byte
 }
 
 func NewSession(domain string) (*TLSSession, error) {
@@ -89,10 +90,15 @@ func (s *TLSSession) Write(content []byte) error {
 
 func (s *TLSSession) Read() ([]byte, error) {
 	var msg *protocol.ApplicationData
+	content := make([]byte, 0)
 
 	for {
 		record, err := s.getDecryptedApplicationMessage()
 		if err != nil {
+			// message splitted into chunks, this way is for detecting when all the chucks have been received
+			if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
+				break
+			}
 			log.Error("failed to read application data")
 			return nil, err
 		}
@@ -103,10 +109,13 @@ func (s *TLSSession) Read() ([]byte, error) {
 			continue
 		}
 		msg = record.(*protocol.ApplicationData)
-		break
+		if string(msg.Content) == string([]byte{48, 13, 10, 13, 10, 23}) {
+			break
+		}
+		content = append(content, msg.Content...)
 	}
 
-	return msg.Content, nil
+	return content, nil
 }
 
 func (s *TLSSession) handShake() error {
@@ -158,6 +167,7 @@ func (s *TLSSession) handShake() error {
 		log.Errorf("Failed on step sending client handshake finished: %v", err)
 		return err
 	}
+	log.Debugf("handshake finished")
 	return nil
 }
 
@@ -583,16 +593,16 @@ func (s *TLSSession) getDecryptedApplicationMessage() (common.ExchangeObject, er
 		return nil, err
 	}
 
-	// every upcoming record would be encrypted with IV XOR'ed with incremental number
+	// every upcoming records would be decrypted with IV XOR'ed with incremental number
 	// for the purpose of making identical messages have same encryption
 	lenIV := len(s.keys.applicationKeys.serverApplicationIV)
 	XORedIV := make([]byte, lenIV)
 	copy(XORedIV, s.keys.applicationKeys.serverApplicationIV)
-	XORedIV[lenIV-1] ^= s.keys.applicationKeys.receivedRecords
+	XORedIV[lenIV-1] ^= s.keys.applicationKeys.decryptedRecords
 
 	payload := crypto.AESGCMDecrypt(s.keys.applicationKeys.serverApplicationKey, XORedIV, record.Serialize())
 
-	s.keys.applicationKeys.receivedRecords++
+	s.keys.applicationKeys.decryptedRecords++
 	bound := len(payload) - 1
 
 	// get rid of zeros which is optional padding in RFC8446
@@ -617,15 +627,17 @@ func (s *TLSSession) getDecryptedApplicationMessage() (common.ExchangeObject, er
 }
 
 func (s *TLSSession) getRecord() (*protocol.Record, error) {
+	_ = s.conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+
 	hdr := make([]byte, protocol.RecordHeaderLen)
-	_, err := io.ReadFull(s.conn, hdr)
+	_, err := s.conn.Read(hdr)
 	if err != nil {
 		return nil, err
 	}
 
 	bodyLen := (int(hdr[3]) << 8) | int(hdr[4])
 	body := make([]byte, bodyLen)
-	_, err = io.ReadFull(s.conn, body)
+	_, err = s.conn.Read(body)
 	if err != nil {
 		return nil, err
 	}
@@ -656,7 +668,16 @@ func (s *TLSSession) encryptApplicationData(content []byte) ([]byte, error) {
 	additionalData = append(additionalData, helpers.Uint16ToBytes(uint16(common.TLS_1_2))...)
 	additionalData = append(additionalData, helpers.Uint16ToBytes(uint16(len(plainText)+16))...) // 16 as auth tag
 
-	cipherText := crypto.AESGCMEncrypt(s.keys.applicationKeys.clientApplicationKey, s.keys.applicationKeys.clientApplicationIV, plainText, additionalData)
+	// every upcoming records would be encrypted with IV XOR'ed with incremental number
+	// for the purpose of making identical messages have same encryption
+	lenIV := len(s.keys.applicationKeys.clientApplicationIV)
+	XORedIV := make([]byte, lenIV)
+	copy(XORedIV, s.keys.applicationKeys.clientApplicationIV)
+	XORedIV[lenIV-1] ^= s.keys.applicationKeys.encryptedRecords
+
+	cipherText := crypto.AESGCMEncrypt(s.keys.applicationKeys.clientApplicationKey, XORedIV, plainText, additionalData)
+
+	s.keys.applicationKeys.encryptedRecords++
 
 	record := protocol.NewRecord(
 		protocol.Record_ApplicationData,
