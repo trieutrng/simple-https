@@ -109,9 +109,6 @@ func (s *TLSSession) Read() ([]byte, error) {
 			continue
 		}
 		msg = record.(*protocol.ApplicationData)
-		if string(msg.Content) == string([]byte{48, 13, 10, 13, 10, 23}) {
-			break
-		}
 		content = append(content, msg.Content...)
 	}
 
